@@ -3,41 +3,46 @@ use rand::Rng;
 use serde::Deserialize;
 
 use std::{
+    collections::HashMap,
     fs::{self, File},
     io::Write,
     path::PathBuf,
 };
 
 use fehler::throws;
-use wasmtime::{Caller, Engine, Func, Linker, Module, Store, TypedFunc};
+use wasmtime::{Engine, Linker, Module, Store, TypedFunc};
+
+use crate::hash::Hash;
 
 #[derive(Deserialize)]
-pub struct Task {
-    pub name: String,
-    generator: std::path::PathBuf,
-    pub fuel: u64,
+pub struct ModulePath(pub std::path::PathBuf);
+
+#[derive(Deserialize)]
+pub struct Problem {
+    pub file_name: ModulePath,
+    pub file_hash: String,
 }
 
 #[derive(Deserialize)]
-pub struct TaskDir {
-    pub tasks: Vec<Task>,
+pub struct ProblemDir {
+    pub problems: HashMap<String, Problem>,
 }
 
-impl TaskDir {
+impl ProblemDir {
     #[throws(anyhow::Error)]
     pub fn new() -> Self {
-        let content = fs::read_to_string("tasks.toml")?;
+        let content = fs::read_to_string("config/problem.toml")?;
         toml::from_str(&content)?
     }
 }
 
-impl Task {
+impl ModulePath {
     #[throws(anyhow::Error)]
-    pub fn load_module(&self, engine: &Engine) -> Module {
+    pub fn load(&self, engine: &Engine) -> Module {
         if let Ok(module) = self.load_cached(engine) {
             return module;
         }
-        let module = Module::from_file(engine, &self.generator)?;
+        let module = Module::from_file(engine, &self.0)?;
         let buf = module.serialize()?;
         let mut file = File::create(self.cache_path()?)?;
         file.write_all(&buf)?;
@@ -52,11 +57,17 @@ impl Task {
 
     #[throws(anyhow::Error)]
     fn cache_path(&self) -> PathBuf {
-        let mut cache_path = self.generator.clone();
+        let mut cache_path = self.0.clone();
         let true = cache_path.set_extension("compiled") else {
             anyhow::bail!("can not change extensions of path {}", cache_path.display())
         };
         cache_path
+    }
+
+    #[throws(anyhow::Error)]
+    pub fn hash(&self) -> Hash {
+        let buf = fs::read(&self.0)?;
+        Hash::new(buf)
     }
 }
 
@@ -64,30 +75,24 @@ pub struct TaskInstance {
     data: Box<[u8]>,
 }
 
-impl Task {
+impl Problem {
     #[throws(anyhow::Error)]
-    pub fn generate<R: Rng>(&self, engine: &Engine, rng: R) -> TaskInstance {
-        let module = self.load_module(engine)?;
-        let mut store = Store::new(&engine, rng);
-
-        let mut linker = Linker::new(&engine);
-        let host_rand = Func::wrap(&mut store, |mut caller: Caller<'_, R>| {
-            caller.data_mut().gen::<i64>()
-        });
-        linker.define("env", "rand", host_rand);
+    pub fn generate<R: Rng>(&self, engine: &Engine, seed: u64) -> TaskInstance {
+        let module = self.file_name.load(engine)?;
+        let mut store = Store::new(engine, ());
 
         // first instantiate, this calls optional start
-        let instance = linker.instantiate(&mut store, &module)?;
+        let instance = Linker::new(engine).instantiate(&mut store, &module)?;
         // call the generator
         let func: TypedFunc<_, (i32, i32)> = instance.get_typed_func(&mut store, "generate")?;
-        let (offset, length) = func.call(&mut store, ())?;
+        let (offset, length) = func.call(&mut store, seed)?;
 
         // read the generated instance from wasm
         let mut data = vec![0; length as usize].into_boxed_slice();
         let memory = instance
             .get_memory(&mut store, "memory")
             .context("memory was not defined")?;
-        memory.read(&store, offset as usize, &mut *data)?;
+        memory.read(&store, offset as usize, &mut data)?;
 
         TaskInstance { data }
     }

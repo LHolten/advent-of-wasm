@@ -1,26 +1,29 @@
+-- integer primary keys do not need to be marked NOT NULL
+-- REFERENCES on id should use ON UPDATE CASCADE
 CREATE TABLE problem (
-    -- integer primary key is always not null?
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    file_name TEXT NOT NULL UNIQUE
+    file_hash TEXT NOT NULL UNIQUE
 ) STRICT;
 -- a problem instance
 CREATE TABLE instance (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    file_name TEXT NOT NULL UNIQUE,
-    problem INTEGER NOT NULL REFERENCES problem ON UPDATE CASCADE
+    problem INTEGER NOT NULL REFERENCES problem ON UPDATE CASCADE,
+    seed INTEGER NOT NULL,
+    UNIQUE (problem, seed)
 ) STRICT;
 -- a wasm solution
 CREATE TABLE solution (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    file_name TEXT NOT NULL UNIQUE
+    file_hash INTEGER NOT NULL UNIQUE
 ) STRICT;
 -- a user of the server
 CREATE TABLE user (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
+    github_id INTEGER NOT NULL UNIQUE
 ) STRICT;
 -- a solution applied to a problem is a submission. it is associated with a user.
 CREATE TABLE submission (

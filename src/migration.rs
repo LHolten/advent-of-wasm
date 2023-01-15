@@ -1,4 +1,4 @@
-use rusqlite::{functions::FunctionFlags, Connection};
+use rusqlite::Connection;
 use rusqlite_migration::{Migrations, M};
 
 fn list_migrations() -> Migrations<'static> {
@@ -16,13 +16,19 @@ mod tests {
     }
 }
 
-pub fn initialize_db() -> anyhow::Result<()> {
-    let mut conn = Connection::open_in_memory()?;
-    list_migrations().to_latest(&mut conn)?;
+pub fn initialize_db(conn: &mut Connection) -> anyhow::Result<()> {
+    list_migrations().to_latest(conn)?;
 
-    conn.pragma_update(None, "journal_mode", &"WAL")?;
-    conn.pragma_update(None, "synchronous", &"NORMAL")?;
-    conn.pragma_update(None, "foreign_keys", &"ON")?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
 
     Ok(())
+}
+
+#[macro_export]
+macro_rules! include_query {
+    ($filename:expr) => {
+        include_str!(concat!(env!("OUT_DIR"), "/queries/", $filename))
+    };
 }

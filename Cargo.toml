@@ -7,13 +7,19 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.68"
-axum = "0.6.1"
+axum = { version = "0.6.1", features = ["macros", "multipart"] }
+base64 = "0.13.1"
 fehler = "1.0.0"
+k12 = "0.2.1"
 maud = "0.24.0"
 oauth2 = "4.3.0"
 rand = "0.8.5"
 rusqlite = { version = "0.28.0", features = ["functions"] }
 rusqlite_migration = "1.0.1"
 serde = { version = "1.0.151", features = ["serde_derive"] }
+tokio = { version = "1.23.0", features = ["full"] }
 toml = "0.5.10"
-wasmtime = "3.0.1"
+wasmtime = { version = "4.0.0", default-features = false, features = ["cranelift"] }
+
+[build-dependencies]
+prql-compiler = { version = "0.3.1", default-features = false }
