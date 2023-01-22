@@ -8,7 +8,7 @@ const EXECUTE: &str = include_query!("execute.prql");
 struct QueuedTask {
     solution_hash: FileHash,
     problem_hash: FileHash,
-    instance_seed: u64,
+    instance_seed: i64,
 }
 
 pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
@@ -38,17 +38,18 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
             };
             let problem = &app.problem_dir.problems[&task.problem_hash];
             let instance = problem.generate(&problem_engine, task.instance_seed)?;
-            let answer =
-                solution.run_submission(&solution_engine, &instance.input, problem.fuel_limit)?;
+
+            let run_result = solution.run(&solution_engine, &instance.input, problem.fuel_limit);
 
             let sql =
                 format!("INSERT INTO execution (fuel_used, answer, instance, solution) {EXECUTE}");
             let conn = app.conn.lock();
             conn.prepare(&sql)?.execute(&[
-                ("@fuel", &0 as &dyn ToSql),
-                ("@answer", &answer),
-                ("instance", &task.instance_seed),
-                ("solution", &task.solution_hash),
+                ("@fuel", &run_result.fuel_used as &dyn ToSql),
+                ("@answer", &run_result.answer),
+                ("@instance_seed", &task.instance_seed),
+                ("@solution_hash", &task.solution_hash),
+                ("@problem_hash", &task.problem_hash),
             ])?;
         }
     }

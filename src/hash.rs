@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 use base64::URL_SAFE_NO_PAD;
 use k12::digest::{ExtendableOutput, Update};
@@ -38,15 +38,22 @@ impl Display for FileHash {
     }
 }
 
+impl FromStr for FileHash {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut res = FileHash([0; 8]);
+        base64::decode_config_slice(s, URL_SAFE_NO_PAD, &mut res.0)?;
+        Ok(res)
+    }
+}
+
 impl<'de> Deserialize<'de> for FileHash {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let encoded = String::deserialize(deserializer)?;
-        let mut res = FileHash([0; 8]);
-        base64::decode_config_slice(encoded, URL_SAFE_NO_PAD, &mut res.0)
-            .map_err(de::Error::custom)?;
-        Ok(res)
+        encoded.parse().map_err(de::Error::custom)
     }
 }

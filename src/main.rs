@@ -11,7 +11,8 @@ use bencher::bencher_main;
 use db::GithubId;
 use maud::html;
 use problem::ProblemDir;
-use rusqlite::Connection;
+use rand::{thread_rng, RngCore};
+use rusqlite::{Connection, ToSql};
 
 mod async_sqlite;
 mod bencher;
@@ -24,7 +25,7 @@ mod solution;
 use async_sqlite::SharedConnection;
 use migration::initialize_db;
 
-use crate::db::InsertSubmission;
+use crate::{db::InsertSubmission, solution::verify_wasm};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -48,6 +49,26 @@ async fn main() -> anyhow::Result<()> {
             r"INSERT OR IGNORE INTO problem (file_hash) VALUES ($1)",
             [&file_hash],
         )?;
+
+        let num: u32 = conn.query_row(
+            include_query!("bench_list.prql"),
+            &[("@problem_hash", &file_hash)],
+            |row| row.get("count"),
+        )?;
+        let mut rng = thread_rng();
+        for _ in (0..problem.leaderboard_instances).skip(num as usize) {
+            let sql = format!(
+                "INSERT INTO instance (problem, seed) {}",
+                include_query!("instance.prql")
+            );
+            conn.execute(
+                &sql,
+                &[
+                    ("@problem_hash", &file_hash as &dyn ToSql),
+                    ("@seed", &(rng.next_u64() as i64)),
+                ],
+            )?;
+        }
     }
     conn.execute(
         "INSERT OR IGNORE INTO user (github_id) VALUES ($1)",
@@ -133,6 +154,11 @@ async fn upload(
         let data_len = data.len();
 
         if &name == "wasm" {
+            if let Err(e) = verify_wasm(&data) {
+                println!("user upload error: {}", e);
+                return;
+            }
+
             let hash = hash::FileHash::new(&data);
             let path = format!("solution/{hash}.wasm");
             fs::write(path, data).unwrap();

@@ -3,7 +3,7 @@
 CREATE TABLE problem (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    file_hash TEXT NOT NULL UNIQUE
+    file_hash INTEGER NOT NULL UNIQUE
 ) STRICT;
 -- a problem instance
 CREATE TABLE instance (
@@ -39,7 +39,8 @@ CREATE TABLE execution (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
     fuel_used INTEGER NOT NULL,
-    answer INTEGER NOT NULL,
+    -- answer can be null if the solution crashed
+    answer INTEGER,
     instance INTEGER NOT NULL REFERENCES instance ON UPDATE CASCADE,
     solution INTEGER NOT NULL REFERENCES solution ON UPDATE CASCADE,
     UNIQUE (instance, solution)

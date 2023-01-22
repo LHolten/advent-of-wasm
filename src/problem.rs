@@ -1,20 +1,12 @@
 use anyhow::Context;
 use serde::Deserialize;
 
-use std::{
-    collections::HashMap,
-    fs::{self, File},
-    io::Write,
-    path::PathBuf,
-};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 use fehler::throws;
 use wasmtime::{Engine, Linker, Module, Store, TypedFunc};
 
 use crate::hash::FileHash;
-
-#[derive(Deserialize)]
-pub struct ModulePath(pub std::path::PathBuf);
 
 #[derive(Deserialize)]
 pub struct Problem {
@@ -37,6 +29,9 @@ impl ProblemDir {
     }
 }
 
+#[derive(Deserialize)]
+pub struct ModulePath(pub std::path::PathBuf);
+
 impl ModulePath {
     #[throws(anyhow::Error)]
     pub fn load(&self, engine: &Engine) -> Module {
@@ -44,9 +39,7 @@ impl ModulePath {
             return module;
         }
         let module = Module::from_file(engine, &self.0)?;
-        let buf = module.serialize()?;
-        let mut file = File::create(self.cache_path()?)?;
-        file.write_all(&buf)?;
+        fs::write(self.cache_path()?, &module.serialize()?)?;
         module
     }
 
@@ -79,7 +72,7 @@ pub struct TaskInstance {
 
 impl Problem {
     #[throws(anyhow::Error)]
-    pub fn generate(&self, engine: &Engine, seed: u64) -> TaskInstance {
+    pub fn generate(&self, engine: &Engine, seed: i64) -> TaskInstance {
         let module = self.file_name.load(engine)?;
         let mut store = Store::new(engine, ());
 
@@ -96,15 +89,6 @@ impl Problem {
             .context("memory was not defined")?;
         memory.read(&store, offset as usize, &mut input)?;
 
-        // let solve: TypedFunc<_, (i32, i32)> = instance.get_typed_func(&mut store, "solution")?;
-        // let (offset, length) = solve.call(&mut store, (offset, length))?;
-
-        // let mut output = vec![0; length as usize].into_boxed_slice();
-        // let memory = instance
-        //     .get_memory(&mut store, "memory")
-        //     .context("memory was not defined")?;
-        // memory.read(&store, offset as usize, &mut output)?;
-
         TaskInstance { input, answer: 0 }
     }
 }
@@ -112,7 +96,9 @@ impl Problem {
 #[cfg(test)]
 mod tests {
 
-    use wasmtime::Engine;
+    use wasmtime::{Config, Engine};
+
+    use crate::solution::Solution;
 
     use super::ProblemDir;
 
@@ -123,7 +109,13 @@ mod tests {
         let problem_hash = dir.mapping["parse"];
         let problem = dir.problems[&problem_hash].generate(&engine, 30)?;
         assert_eq!(&*problem.input, b"30");
-        // assert_eq!(&*problem.output, &u64::to_be_bytes(30)[..]);
+
+        let solution = Solution {
+            hash: "bDHNXb6S_4Y".parse().unwrap(),
+        };
+        let engine = Engine::new(&Config::new().consume_fuel(true))?;
+        let res = solution.run(&engine, &problem.input, 10000);
+        assert_eq!(res.answer, Some(30));
 
         Ok(())
     }
