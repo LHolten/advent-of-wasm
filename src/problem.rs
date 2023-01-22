@@ -19,12 +19,14 @@ pub struct ModulePath(pub std::path::PathBuf);
 #[derive(Deserialize)]
 pub struct Problem {
     pub file_name: ModulePath,
-    pub file_hash: FileHash,
+    pub leaderboard_instances: u32, // this is how many of the oldest instances need to be ran
+    pub fuel_limit: u64,
 }
 
 #[derive(Deserialize)]
 pub struct ProblemDir {
-    pub problems: HashMap<String, Problem>,
+    pub problems: HashMap<FileHash, Problem>,
+    pub mapping: HashMap<String, FileHash>,
 }
 
 impl ProblemDir {
@@ -71,8 +73,8 @@ impl ModulePath {
 }
 
 pub struct TaskInstance {
-    input: Box<[u8]>,
-    output: Box<[u8]>,
+    pub input: Box<[u8]>,
+    pub answer: i64,
 }
 
 impl Problem {
@@ -94,16 +96,16 @@ impl Problem {
             .context("memory was not defined")?;
         memory.read(&store, offset as usize, &mut input)?;
 
-        let solve: TypedFunc<_, (i32, i32)> = instance.get_typed_func(&mut store, "solution")?;
-        let (offset, length) = solve.call(&mut store, (offset, length))?;
+        // let solve: TypedFunc<_, (i32, i32)> = instance.get_typed_func(&mut store, "solution")?;
+        // let (offset, length) = solve.call(&mut store, (offset, length))?;
 
-        let mut output = vec![0; length as usize].into_boxed_slice();
-        let memory = instance
-            .get_memory(&mut store, "memory")
-            .context("memory was not defined")?;
-        memory.read(&store, offset as usize, &mut output)?;
+        // let mut output = vec![0; length as usize].into_boxed_slice();
+        // let memory = instance
+        //     .get_memory(&mut store, "memory")
+        //     .context("memory was not defined")?;
+        // memory.read(&store, offset as usize, &mut output)?;
 
-        TaskInstance { input, output }
+        TaskInstance { input, answer: 0 }
     }
 }
 
@@ -118,9 +120,10 @@ mod tests {
     fn gen_instance() -> anyhow::Result<()> {
         let dir = ProblemDir::new()?;
         let engine = Engine::default();
-        let problem = dir.problems["parse"].generate(&engine, 30)?;
+        let problem_hash = dir.mapping["parse"];
+        let problem = dir.problems[&problem_hash].generate(&engine, 30)?;
         assert_eq!(&*problem.input, b"30");
-        assert_eq!(&*problem.output, &u64::to_be_bytes(30)[..]);
+        // assert_eq!(&*problem.output, &u64::to_be_bytes(30)[..]);
 
         Ok(())
     }

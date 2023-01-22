@@ -4,18 +4,17 @@ use anyhow::Context;
 use fehler::throws;
 use wasmtime::{Engine, Linker, Store, TypedFunc};
 
-use crate::problem::ModulePath;
+use crate::{hash::FileHash, problem::ModulePath};
 
-pub struct Submission {
-    author: String,
-    hash: String,
+pub struct Solution {
+    pub hash: FileHash,
 }
 
-impl Submission {
+impl Solution {
     #[throws(anyhow::Error)]
-    pub fn run_submission(&self, engine: &Engine, data: &[u8], fuel: u64) -> Box<[u8]> {
+    pub fn run_submission(&self, engine: &Engine, data: &[u8], fuel: u64) -> i64 {
         let mut path = PathBuf::from("submission");
-        path.push(self.hash);
+        path.push(format!("{}.wasm", self.hash.to_string()));
 
         let module = ModulePath(path).load(engine)?;
         let mut store = Store::new(engine, ());
@@ -42,12 +41,7 @@ impl Submission {
         let input = data.len() as i32;
 
         // call the actual solve function
-        let func: TypedFunc<_, (i32, i32)> = instance.get_typed_func(&mut store, "solve")?;
-        let (offset, length) = func.call(&mut store, input)?;
-
-        // read the output from the slice returned by the module
-        let mut output = vec![0; length as usize].into_boxed_slice();
-        memory.read(&store, offset as usize, &mut *output)?;
-        output
+        let func: TypedFunc<_, i64> = instance.get_typed_func(&mut store, "solve")?;
+        func.call(&mut store, input)?
     }
 }

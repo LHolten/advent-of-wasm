@@ -20,8 +20,9 @@ pub struct InsertSubmission {
 impl InsertSubmission {
     pub async fn execute(self, conn: &SharedConnection) -> anyhow::Result<()> {
         let submission_query = include_query!("submit.prql");
-        let submission_insert =
-            format!("INSERT INTO submission (problem, user, solution) {submission_query}");
+        let submission_insert = format!(
+            "INSERT OR IGNORE INTO submission (problem, user, solution) {submission_query}"
+        );
 
         conn.call(move |conn| {
             conn.execute(
@@ -40,20 +41,4 @@ impl InsertSubmission {
         .await?;
         Ok(())
     }
-}
-
-impl SharedConnection {
-    pub async fn get_user(&self, github_id: u64) -> anyhow::Result<u64> {
-        self.call(move |conn| {
-            conn.query_row(
-                "SELECT id FROM user WHERE github_id == $1",
-                [github_id],
-                |x| x.get("id"),
-            )
-        })
-        .await
-        .map_err(From::from)
-    }
-
-    // pub async fn submit(&self, github_id: u64, )
 }

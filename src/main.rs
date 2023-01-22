@@ -1,4 +1,4 @@
-use std::{fs, sync::Arc};
+use std::{fs, sync::Arc, thread};
 
 use axum::{
     extract::{Multipart, Path, State},
@@ -7,16 +7,19 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use bencher::bencher_main;
 use db::GithubId;
 use maud::html;
 use problem::ProblemDir;
 use rusqlite::Connection;
 
 mod async_sqlite;
+mod bencher;
 mod db;
 mod hash;
 mod migration;
 mod problem;
+mod solution;
 
 use async_sqlite::SharedConnection;
 use migration::initialize_db;
@@ -24,7 +27,7 @@ use migration::initialize_db;
 use crate::db::InsertSubmission;
 
 #[derive(Clone)]
-struct AppState {
+pub struct AppState {
     problem_dir: Arc<ProblemDir>,
     conn: SharedConnection,
 }
@@ -37,12 +40,13 @@ async fn main() -> anyhow::Result<()> {
     initialize_db(&mut conn).expect("could not initialise db");
 
     let problem_dir = Arc::new(ProblemDir::new()?);
-    for problem in problem_dir.problems.values() {
-        let file_hash = problem.file_name.hash()?;
-        assert_eq!(file_hash.to_string(), problem.file_hash.to_string());
+    for (file_hash, problem) in &problem_dir.problems {
+        let real_file_hash = problem.file_name.hash()?;
+        assert_eq!(file_hash.to_string(), real_file_hash.to_string());
+
         conn.execute(
             r"INSERT OR IGNORE INTO problem (file_hash) VALUES ($1)",
-            [&problem.file_hash],
+            [&file_hash],
         )?;
     }
     conn.execute(
@@ -51,14 +55,17 @@ async fn main() -> anyhow::Result<()> {
     )?;
 
     let conn = SharedConnection::new(conn);
+    let app_state = AppState { problem_dir, conn };
 
     // build our application with a single route
     let app = Router::new()
         .route("/problem/:file_name", get(get_problem))
         .route("/problem/:file_name/upload", post(upload))
-        .with_state(AppState { problem_dir, conn });
+        .with_state(app_state.clone());
 
-    // run it with hyper on localhost:3000
+    // start the bencher
+    thread::spawn(|| bencher_main(app_state).unwrap());
+    // run out app with hyper on localhost:3000
     axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
         .serve(app.into_make_service())
         .await?;
@@ -133,7 +140,7 @@ async fn upload(
             let submission = InsertSubmission {
                 github_id: DUMMY_USER,
                 file_hash: hash,
-                problem_hash: app.problem_dir.problems[&file_name].file_hash,
+                problem_hash: app.problem_dir.mapping[&file_name],
             };
 
             submission.execute(&app.conn).await.unwrap();

@@ -39,6 +39,7 @@ CREATE TABLE execution (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
     fuel_used INTEGER NOT NULL,
+    answer INTEGER NOT NULL,
     instance INTEGER NOT NULL REFERENCES instance ON UPDATE CASCADE,
     solution INTEGER NOT NULL REFERENCES solution ON UPDATE CASCADE,
     UNIQUE (instance, solution)
