@@ -1,5 +1,4 @@
 use anyhow::Context;
-use rand::Rng;
 use serde::Deserialize;
 
 use std::{
@@ -12,7 +11,7 @@ use std::{
 use fehler::throws;
 use wasmtime::{Engine, Linker, Module, Store, TypedFunc};
 
-use crate::hash::Hash;
+use crate::hash::FileHash;
 
 #[derive(Deserialize)]
 pub struct ModulePath(pub std::path::PathBuf);
@@ -20,7 +19,7 @@ pub struct ModulePath(pub std::path::PathBuf);
 #[derive(Deserialize)]
 pub struct Problem {
     pub file_name: ModulePath,
-    pub file_hash: String,
+    pub file_hash: FileHash,
 }
 
 #[derive(Deserialize)]
@@ -50,7 +49,7 @@ impl ModulePath {
     }
 
     #[throws(anyhow::Error)]
-    pub fn load_cached(&self, engine: &Engine) -> Module {
+    fn load_cached(&self, engine: &Engine) -> Module {
         let cache_path = self.cache_path()?;
         unsafe { Module::deserialize_file(engine, cache_path)? }
     }
@@ -65,19 +64,20 @@ impl ModulePath {
     }
 
     #[throws(anyhow::Error)]
-    pub fn hash(&self) -> Hash {
+    pub fn hash(&self) -> FileHash {
         let buf = fs::read(&self.0)?;
-        Hash::new(buf)
+        FileHash::new(buf)
     }
 }
 
 pub struct TaskInstance {
-    data: Box<[u8]>,
+    input: Box<[u8]>,
+    output: Box<[u8]>,
 }
 
 impl Problem {
     #[throws(anyhow::Error)]
-    pub fn generate<R: Rng>(&self, engine: &Engine, seed: u64) -> TaskInstance {
+    pub fn generate(&self, engine: &Engine, seed: u64) -> TaskInstance {
         let module = self.file_name.load(engine)?;
         let mut store = Store::new(engine, ());
 
@@ -88,12 +88,40 @@ impl Problem {
         let (offset, length) = func.call(&mut store, seed)?;
 
         // read the generated instance from wasm
-        let mut data = vec![0; length as usize].into_boxed_slice();
+        let mut input = vec![0; length as usize].into_boxed_slice();
         let memory = instance
             .get_memory(&mut store, "memory")
             .context("memory was not defined")?;
-        memory.read(&store, offset as usize, &mut data)?;
+        memory.read(&store, offset as usize, &mut input)?;
 
-        TaskInstance { data }
+        let solve: TypedFunc<_, (i32, i32)> = instance.get_typed_func(&mut store, "solution")?;
+        let (offset, length) = solve.call(&mut store, (offset, length))?;
+
+        let mut output = vec![0; length as usize].into_boxed_slice();
+        let memory = instance
+            .get_memory(&mut store, "memory")
+            .context("memory was not defined")?;
+        memory.read(&store, offset as usize, &mut output)?;
+
+        TaskInstance { input, output }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use wasmtime::Engine;
+
+    use super::ProblemDir;
+
+    #[test]
+    fn gen_instance() -> anyhow::Result<()> {
+        let dir = ProblemDir::new()?;
+        let engine = Engine::default();
+        let problem = dir.problems["parse"].generate(&engine, 30)?;
+        assert_eq!(&*problem.input, b"30");
+        assert_eq!(&*problem.output, &u64::to_be_bytes(30)[..]);
+
+        Ok(())
     }
 }

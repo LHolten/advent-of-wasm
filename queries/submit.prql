@@ -1,0 +1,5 @@
+from user
+filter user.github_id == s"@github_id"
+join problem [problem.file_hash == s"@problem_hash"]
+join solution [solution.file_hash == s"@solution_hash"]
+select [problem.id, user.id, solution.id]

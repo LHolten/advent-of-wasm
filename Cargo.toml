@@ -14,7 +14,7 @@ k12 = "0.2.1"
 maud = "0.24.0"
 oauth2 = "4.3.0"
 rand = "0.8.5"
-rusqlite = { version = "0.28.0", features = ["functions"] }
+rusqlite = { version = "0.28.0" }
 rusqlite_migration = "1.0.1"
 serde = { version = "1.0.151", features = ["serde_derive"] }
 tokio = { version = "1.23.0", features = ["full"] }
@@ -22,4 +22,4 @@ toml = "0.5.10"
 wasmtime = { version = "4.0.0", default-features = false, features = ["cranelift"] }
 
 [build-dependencies]
-prql-compiler = { version = "0.3.1", default-features = false }
+prql-compiler = { version = "0.4", default-features = false }

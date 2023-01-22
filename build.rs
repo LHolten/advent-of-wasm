@@ -1,4 +1,7 @@
-use prql_compiler::compile;
+use prql_compiler::{
+    compile,
+    sql::{Dialect, Options},
+};
 use std::{env, fs, path::Path};
 
 fn main() {
@@ -13,13 +16,14 @@ fn main() {
         fs::create_dir(&dest_dir).unwrap();
     }
 
+    let options = Options::default().with_dialect(Dialect::SQLite).some();
     for path in paths {
         let prql_path = path.unwrap().path();
         let sql_path = dest_dir.join(prql_path.file_name().unwrap());
 
         let prql_string = fs::read_to_string(prql_path).unwrap();
 
-        let sql_string = compile(&prql_string).unwrap();
+        let sql_string = compile(&prql_string, options.clone()).unwrap();
 
         fs::write(sql_path, sql_string).unwrap();
     }

@@ -1,2 +1,7 @@
 /target
 /Cargo.lock
+/config
+/problem
+/solution
+*.db*
+*/old

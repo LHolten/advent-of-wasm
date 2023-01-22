@@ -1,5 +1,4 @@
-
-table average_fuel = (
+let average_fuel = (
     from exec
     group [exec.solution, exec.task] (
         aggregate [

@@ -7,11 +7,13 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use db::GithubId;
 use maud::html;
 use problem::ProblemDir;
 use rusqlite::Connection;
 
 mod async_sqlite;
+mod db;
 mod hash;
 mod migration;
 mod problem;
@@ -19,27 +21,34 @@ mod problem;
 use async_sqlite::SharedConnection;
 use migration::initialize_db;
 
+use crate::db::InsertSubmission;
+
 #[derive(Clone)]
 struct AppState {
     problem_dir: Arc<ProblemDir>,
     conn: SharedConnection,
 }
 
+const DUMMY_USER: GithubId = GithubId(1337);
+
 #[tokio::main]
-async fn main() {
-    let mut conn = Connection::open("test.db").unwrap();
+async fn main() -> anyhow::Result<()> {
+    let mut conn = Connection::open("test.db")?;
     initialize_db(&mut conn).expect("could not initialise db");
 
-    let problem_dir = Arc::new(ProblemDir::new().unwrap());
+    let problem_dir = Arc::new(ProblemDir::new()?);
     for problem in problem_dir.problems.values() {
-        let file_hash = problem.file_name.hash().unwrap();
-        assert_eq!(file_hash.to_string(), problem.file_hash);
+        let file_hash = problem.file_name.hash()?;
+        assert_eq!(file_hash.to_string(), problem.file_hash.to_string());
         conn.execute(
             r"INSERT OR IGNORE INTO problem (file_hash) VALUES ($1)",
             [&problem.file_hash],
-        )
-        .unwrap();
+        )?;
     }
+    conn.execute(
+        "INSERT OR IGNORE INTO user (github_id) VALUES ($1)",
+        [&DUMMY_USER],
+    )?;
 
     let conn = SharedConnection::new(conn);
 
@@ -47,14 +56,13 @@ async fn main() {
     let app = Router::new()
         .route("/problem/:file_name", get(get_problem))
         .route("/problem/:file_name/upload", post(upload))
-        .route("/", get(overview))
         .with_state(AppState { problem_dir, conn });
 
     // run it with hyper on localhost:3000
     axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
         .serve(app.into_make_service())
-        .await
-        .unwrap();
+        .await?;
+    Ok(())
 }
 
 async fn get_problem(
@@ -105,40 +113,30 @@ async fn get_problem(
     Html(res.into_string())
 }
 
-async fn overview(State(app): State<AppState>) -> impl IntoResponse {
-    let res = html! {
-        ul {
-            @for (problem_name, problem) in &app.problem_dir.problems {
-                li {
-                    a href={"/problem/" (problem.file_hash)} {(problem_name)}
-                }
-            }
-        }
-    };
-    Html(res.into_string())
-}
-
-async fn upload(State(app): State<AppState>, mut multipart: Multipart) {
+async fn upload(
+    State(app): State<AppState>,
+    Path(file_name): Path<String>,
+    mut multipart: Multipart,
+) {
     println!("got multipart");
+
     while let Some(field) = multipart.next_field().await.unwrap() {
         let name = field.name().unwrap().to_string();
         let data = field.bytes().await.unwrap();
         let data_len = data.len();
 
         if &name == "wasm" {
-            let hash = hash::Hash::new(&data);
+            let hash = hash::FileHash::new(&data);
             let path = format!("solution/{hash}.wasm");
             fs::write(path, data).unwrap();
 
-            app.conn
-                .call(move |conn| {
-                    conn.execute(
-                        "INSERT OR IGNORE INTO solution (file_hash) VALUES ($1)",
-                        [&hash],
-                    )
-                    .unwrap()
-                })
-                .await;
+            let submission = InsertSubmission {
+                github_id: DUMMY_USER,
+                file_hash: hash,
+                problem_hash: app.problem_dir.problems[&file_name].file_hash,
+            };
+
+            submission.execute(&app.conn).await.unwrap();
         }
 
         println!("Length of `{name}` is {data_len} bytes");
