@@ -1,147 +1,18 @@
 use sea_query::{
-    Alias, ColumnRef, Cond, Condition, Expr, Func, Iden, JoinType, NullAlias, Order, OrderExpr,
-    OrderedStatement, OverStatement, Query, SelectStatement, SimpleExpr, WindowStatement,
+    Alias, Cond, Expr, Func, Iden, JoinType, Order, OrderedStatement, Query, SelectStatement,
+    SimpleExpr, WindowStatement,
 };
 use std::{
-    cell::Cell,
     marker::PhantomData,
+    ops::{Neg, Not},
     rc::Rc,
     sync::atomic::{AtomicU64, Ordering},
 };
-
-// enum Db<T> {
-//     Real(T),
-//     Iden(Rc<dyn Iden>),
-//     Query(SelectStatement),
-// }
-
-struct MyQuery(SelectStatement);
-
-impl MyQuery {
-    pub fn filter<F>(self, f: F) -> Self
-    where
-        F: FnOnce(SimpleExpr) -> SimpleExpr,
-    {
-        let alias = iden();
-        let filter = f(Expr::col(alias).into());
-
-        let query = Query::select()
-            .from_subquery(self.0, alias)
-            .and_where(filter)
-            .expr(Expr::asterisk())
-            .take();
-        Self(query)
-    }
-
-    pub fn map<R, F>(self, f: F) -> MyQuery
-    where
-        F: FnOnce(SimpleExpr) -> SimpleExpr,
-    {
-        let alias = iden();
-        let map = f(Expr::col(alias).into());
-        let query = Query::select()
-            .from_subquery(self.0, alias)
-            .expr(map)
-            .take();
-        Self(query)
-    }
-}
-
-// impl GroupRef {
-//     pub fn map<F>(mut self, f: F) -> MyQuery
-//     where
-//         F: FnOnce(GroupRef) -> SimpleExpr,
-//     {
-//         let res = f(self.group);
-//         let query = self.query.add_group_by(self.group_by).expr(res).take();
-//         MyQuery(query)
-//     }
-
-//     pub fn flat_map<F>(mut self, f: F) -> MyQuery
-//     where
-//         F: FnOnce(GroupRef) -> GroupRef,
-//     {
-//         let mut window = WindowStatement::new();
-
-//         self.group = f(self.group);
-//         if let Some(part) = self.group_by {
-//             window.add_partition_by(part);
-//         }
-//         if let Some(ord) = self.group.sort_by {
-//             window.add_order_by(ord);
-//         }
-
-//         let idx = iden();
-//         self.query
-//             .expr_window_as(Expr::cust("ROW_NUMBER()"), window, idx);
-
-//         if let Some(n) = self.group.limit {
-//             self.query.and_where(Expr::col(idx).lt(n));
-//         }
-
-//         MyQuery(self.query)
-//     }
-// }
 
 pub fn iden() -> Rc<dyn Iden> {
     static IDEN_NUM: AtomicU64 = AtomicU64::new(0);
     let next = IDEN_NUM.fetch_add(1, Ordering::Relaxed);
     Rc::new(Alias::new(&next.to_string()))
-}
-
-impl<'a> ValueRef<'a> {
-    pub fn is_same(self) -> WindowStatement {
-        WindowStatement::new().add_partition_by(self.inner).take()
-    }
-
-    pub fn avg_of(self, window: WindowStatement) -> SimpleExpr {
-        let (avg, subquery) = (iden(), iden());
-        let expr = Expr::expr(self.inner).sum().div(Expr::asterisk().count());
-        let select = Query::select()
-            .from_subquery(
-                self.select
-                    .take()
-                    .expr_window_as(expr, window, avg)
-                    .expr(expr)
-                    .take(),
-                subquery,
-            )
-            .expr(Expr::table_asterisk(subquery));
-
-        self.select.set(select.take());
-        Expr::col(avg).into()
-    }
-
-    pub fn idx_of(self, mut window: WindowStatement) -> SimpleExpr {
-        let (idx, subquery) = (iden(), iden());
-        let expr = Expr::cust("ROW_NUMBER()");
-        window.order_by_expr(self.inner, Order::Asc);
-
-        let select = Query::select()
-            .from_subquery(
-                self.select
-                    .take()
-                    .expr_window_as(expr, window, idx)
-                    .expr(expr)
-                    .take(),
-                subquery,
-            )
-            .expr(Expr::table_asterisk(subquery));
-
-        self.select.set(select.take());
-        Expr::col(idx).into()
-    }
-}
-
-#[derive(Default)]
-struct RowRef<'t> {
-    exprs: Vec<ValueRef<'t>>,
-}
-
-impl<'t> RowRef<'t> {
-    fn into_inner(self) -> SimpleExpr {
-        todo!()
-    }
 }
 
 struct ValueRef<'t> {
@@ -156,17 +27,43 @@ impl<'t> ValueRef<'t> {
             _p: PhantomData,
         }
     }
+
+    fn lt(&self, arg: i32) -> ValueRef {
+        todo!()
+    }
+
+    fn eq(&self, problem: Problem) -> ValueRef {
+        todo!()
+    }
+}
+
+impl<'t> Neg for ValueRef<'t> {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        let expr = Expr::expr(self.inner).mul(-1);
+        Self::from_expr(expr)
+    }
+}
+
+impl<'t> Not for ValueRef<'t> {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        let expr = Expr::expr(self.inner).not();
+        Self::from_expr(expr)
+    }
 }
 
 struct GroupRef<'t> {
     select: &'t mut SelectStatement,
-    group: RowRef<'t>,
+    group: Vec<ValueRef<'t>>,
 }
 
 impl<'t> GroupRef<'t> {
-    pub fn rank(&mut self, val: RowRef<'t>) -> ValueRef<'t> {
+    pub fn rank(&mut self, val: impl Row<'t>) -> ValueRef<'t> {
         let mut window = WindowStatement::new();
-        for expr in val.exprs {
+        for expr in val.into_row() {
             window.order_by_expr(expr.inner, Order::Asc);
         }
         let alias = iden();
@@ -177,9 +74,9 @@ impl<'t> GroupRef<'t> {
 }
 
 #[derive(Default)]
-struct NewQuery {
+struct NewQuery<R: Table> {
     select: SelectStatement,
-    rows: RowRef<'static>,
+    row: R::Target<'static>,
 }
 
 struct QueryRef<'t> {
@@ -195,21 +92,33 @@ struct ReifyResRef<'t> {
     _p: PhantomData<&'t mut &'t ()>,
 }
 
-impl NewQuery {
-    pub fn map<F>(mut self, f: F) -> NewQuery
+struct QueryOk {
+    select: SelectStatement,
+    reify: ReifyResRef<'static>,
+}
+
+impl<R> NewQuery<R>
+where
+    R: Table,
+{
+    pub fn map<O: Table, F>(mut self, f: F) -> NewQuery<O>
     where
-        F: for<'a> FnOnce(QueryRef<'a>, RowRef<'a>) -> RowRef<'a>,
+        F: for<'a> FnOnce(QueryRef<'a>, R::Target<'a>) -> O::Target<'a>,
     {
         let q = QueryRef {
             select: &mut self.select,
             _p: PhantomData,
         };
-        self.rows = f(q, self.rows);
-        self
+        NewQuery {
+            select: self.select,
+            row: f(q, self.row),
+        }
     }
 
-    pub fn contains<'t>(self, val: RowRef<'t>) -> ValueRef<'t> {
-        ValueRef::from_expr(Expr::expr(val.into_inner()).in_subquery(self.select))
+    pub fn contains<'t>(self, val: impl Row<'t>) -> ValueRef<'t> {
+        let val = val.into_row();
+        let tuple = Expr::tuple(val.into_iter().map(|x| x.inner));
+        ValueRef::from_expr(tuple.in_subquery(self.select))
     }
 }
 
@@ -223,11 +132,7 @@ impl<'t> QueryRef<'t> {
             .take();
     }
 
-    pub fn take(&mut self, n: u32) {
-        todo!()
-    }
-
-    pub fn flat_map(&mut self, mut other: NewQuery) -> RowRef<'t> {
+    pub fn flat_map<O: Table>(&mut self, mut other: NewQuery<O>) -> O::Target<'t> {
         let (alias1, alias2) = (iden(), iden());
         *self.select = Query::select()
             .from_subquery(self.select.take(), alias1)
@@ -240,24 +145,24 @@ impl<'t> QueryRef<'t> {
             .expr(Expr::table_asterisk(alias1))
             .expr(Expr::table_asterisk(alias2))
             .take();
-        other.rows
+        other.row
     }
 
     // self is borrowed, because we need to mutate it to do group operations
-    pub fn group_by(&'t mut self, group: RowRef<'t>) -> GroupRef<'t> {
+    pub fn group_by(&'t mut self, group: impl Row<'t>) -> GroupRef<'t> {
         GroupRef {
             select: &mut self.select,
-            group,
+            group: group.into_row(),
         }
     }
 
-    pub fn sort_by(&mut self, order: RowRef<'t>) {
-        for expr in order.exprs {
+    pub fn sort_by(&mut self, order: impl Row<'t>) {
+        for expr in order.into_row() {
             self.select.order_by_expr(expr.inner, Order::Asc);
         }
     }
 
-    pub fn reify<T, F>(self, f: F) -> ReifyResRef<'t>
+    pub fn map<T, F>(self, f: F) -> ReifyResRef<'t>
     where
         F: FnMut(ReifyRef<'t>) -> T,
     {
@@ -271,60 +176,214 @@ impl<'t> ReifyRef<'t> {
     }
 }
 
-fn query<F>(f: F) -> NewQuery
+fn query<F>(f: F) -> QueryOk
 where
     F: for<'t> FnOnce(QueryRef<'t>) -> ReifyResRef<'t>,
 {
-    let query = NewQuery::default();
+    let query = NewQuery::<Empty>::default();
     todo!()
     // query.ma
 }
 
-fn sub_query<F>(f: F) -> NewQuery
+fn sub_query<O: Table, F>(f: F) -> NewQuery<O>
 where
-    F: for<'t> FnOnce(QueryRef<'t>) -> RowRef<'t>,
+    F: for<'t> FnOnce(QueryRef<'t>) -> O::Target<'t>,
 {
-    let query = NewQuery::default();
+    let query = NewQuery::<Empty>::default();
     query.map(|q, r| f(q))
 }
 
-fn submissions() -> NewQuery {
+pub trait Table {
+    type Target<'t>: Row<'t>;
+}
+
+pub trait Row<'t>: Table<Target<'t> = Self> {
+    fn into_row(self) -> Vec<ValueRef<'t>>;
+    fn from_row(row: Vec<ValueRef<'t>>) -> Self;
+}
+
+impl<'t> Row<'t> for ValueRef<'t> {
+    fn into_row(self) -> Vec<ValueRef<'t>> {
+        vec![self]
+    }
+
+    fn from_row(row: Vec<ValueRef<'t>>) -> Self {
+        row[0]
+    }
+}
+
+impl<'a> Table for ValueRef<'a> {
+    type Target<'t> = ValueRef<'t>;
+}
+
+impl<'t, A: Row<'t>, B: Row<'t>> Row<'t> for (A, B) {
+    fn into_row(self) -> Vec<ValueRef<'t>> {
+        let mut res = self.0.into_row();
+        res.extend(self.1.into_row());
+        res
+    }
+
+    fn from_row(row: Vec<ValueRef<'t>>) -> Self {
+        todo!()
+    }
+}
+
+impl<A: Table, B: Table> Table for (A, B) {
+    type Target<'t> = (A::Target<'t>, B::Target<'t>);
+}
+
+#[derive(Default)]
+struct Empty;
+impl<'t> Row<'t> for Empty {
+    fn into_row(self) -> Vec<ValueRef<'t>> {
+        vec![]
+    }
+
+    fn from_row(row: Vec<ValueRef<'t>>) -> Self {
+        Empty
+    }
+}
+
+impl Table for Empty {
+    type Target<'t> = Empty;
+}
+
+struct Instance<'t> {
+    timestamp: ValueRef<'t>,
+    problem: ValueRef<'t>,
+    seed: ValueRef<'t>,
+}
+
+impl<'t> Row<'t> for Instance<'t> {
+    fn into_row(self) -> Vec<ValueRef<'t>> {
+        vec![self.timestamp, self.problem, self.seed]
+    }
+
+    fn from_row(row: Vec<ValueRef<'t>>) -> Self {
+        let mut row = row.into_iter();
+        Self {
+            timestamp: row.next().unwrap(),
+            problem: row.next().unwrap(),
+            seed: row.next().unwrap(),
+        }
+    }
+}
+
+impl<'a> Table for Instance<'a> {
+    type Target<'t> = Instance<'t>;
+}
+
+fn instances() -> NewQuery<Instance<'static>> {
+    todo!()
+}
+
+struct Execution<'t> {
+    solution: ValueRef<'t>,
+    instance: ValueRef<'t>,
+}
+
+impl<'a> Table for Execution<'a> {
+    type Target<'t> = Execution<'t>;
+}
+
+impl<'t> Row<'t> for Execution<'t> {
+    fn into_row(self) -> Vec<ValueRef<'t>> {
+        todo!()
+    }
+
+    fn from_row(row: Vec<ValueRef<'t>>) -> Self {
+        todo!()
+    }
+}
+
+fn executions() -> NewQuery<Execution<'static>> {
+    todo!()
+}
+
+struct Solution<'t> {
+    file_hash: ValueRef<'t>,
+}
+
+impl<'a> Table for Solution<'a> {
+    type Target<'t> = Solution<'t>;
+}
+
+impl<'t> Row<'t> for Solution<'t> {
+    fn into_row(self) -> Vec<ValueRef<'t>> {
+        todo!()
+    }
+
+    fn from_row(row: Vec<ValueRef<'t>>) -> Self {
+        todo!()
+    }
+}
+
+fn solutions() -> NewQuery<Solution<'static>> {
+    todo!()
+}
+
+struct Problem<'t> {
+    file_hash: ValueRef<'t>,
+}
+
+impl<'a> Table for Problem<'a> {
+    type Target<'t> = Problem<'t>;
+}
+
+impl<'t> Row<'t> for Problem<'t> {
+    fn into_row(self) -> Vec<ValueRef<'t>> {
+        todo!()
+    }
+
+    fn from_row(row: Vec<ValueRef<'t>>) -> Self {
+        todo!()
+    }
+}
+
+fn problems() -> NewQuery<Problem<'static>> {
+    todo!()
+}
+
+struct Submission<'t> {
+    solution: ValueRef<'t>,
+    problem: ValueRef<'t>,
+    timestamp: ValueRef<'t>,
+}
+
+impl<'a> Table for Submission<'a> {
+    type Target<'t> = Submission<'t>;
+}
+
+impl<'t> Row<'t> for Submission<'t> {
+    fn into_row(self) -> Vec<ValueRef<'t>> {
+        todo!()
+    }
+
+    fn from_row(row: Vec<ValueRef<'t>>) -> Self {
+        todo!()
+    }
+}
+
+fn submissions() -> NewQuery<Submission<'static>> {
     let alias = iden();
     NewQuery {
         select: Query::select()
             .from_as(Alias::new("submissions"), alias)
             .expr(Expr::table_asterisk(alias))
             .take(),
-        rows: RowRef {
-            exprs: vec![ValueRef::from_expr(Expr::col((
-                alias,
-                Alias::new("solution"),
-            )))],
+        row: Submission {
+            solution: ValueRef::from_expr(Expr::col((alias, Alias::new("solution")))),
+            problem: todo!(),
+            timestamp: todo!(),
         },
     }
 }
 
-fn instances() -> NewQuery {
-    todo!()
-}
-
-fn executions() -> NewQuery {
-    todo!()
-}
-
-fn solutions() -> NewQuery {
-    todo!()
-}
-
-fn problems() -> NewQuery {
-    todo!()
-}
-
-fn bench_instances() -> NewQuery {
-    sub_query(|q| {
+fn bench_instances() -> NewQuery<Instance<'static>> {
+    sub_query(|mut q| {
         let instance = q.flat_map(instances());
-        let same_problem = q.group_by(instance.problem);
-        let is_new = same_problem.rank(-instance.timestamp) <= 5;
+        let mut same_problem = q.group_by(instance.problem);
+        let is_new = same_problem.rank(-instance.timestamp).lt(5);
         q.filter(is_new);
         q.sort_by(instance.timestamp);
         instance
@@ -333,30 +392,30 @@ fn bench_instances() -> NewQuery {
 
 // last five problem-instances for each problem
 // which have not been executed
-fn bench_queue() -> NewQuery {
+fn bench_queue() -> QueryOk {
     // list of which solutions are submitted to which problems
-    let submissions = sub_query(|q| {
+    let submissions = sub_query(|mut q| {
         let submission = q.flat_map(submissions());
         (submission.solution, submission.problem)
     });
 
     // list of which solutions are executed on which instances
-    let executions = sub_query(|q| {
+    let executions = sub_query(|mut q| {
         let execution = q.flat_map(executions());
         (execution.solution, execution.instance)
     });
 
-    query(|q| {
+    query(|mut q| {
         // the relevant tables for our query
         let instance = q.flat_map(bench_instances());
         let solution = q.flat_map(solutions());
         let problem = q.flat_map(problems());
 
-        q.filter(instance.problem == problem);
+        q.filter(instance.problem.eq(problem));
         q.filter(submissions.contains((solution, problem)));
         q.filter(!executions.contains((solution, instance)));
 
-        q.map(|r| QueuedExecution {
+        q.map(|mut r| QueuedExecution {
             instance_seed: r.get(instance.seed),
             solution_hash: r.get(solution.file_hash),
             problem_hash: r.get(problem.file_hash),
