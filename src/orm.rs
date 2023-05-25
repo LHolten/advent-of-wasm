@@ -15,6 +15,7 @@ pub fn iden() -> Rc<dyn Iden> {
     Rc::new(Alias::new(&next.to_string()))
 }
 
+#[derive(Clone)]
 struct ValueRef<'t> {
     inner: SimpleExpr,
     _p: PhantomData<&'t mut &'t ()>,
@@ -28,11 +29,11 @@ impl<'t> ValueRef<'t> {
         }
     }
 
-    fn lt(&self, arg: i32) -> ValueRef {
+    fn lt(&self, arg: i32) -> Self {
         todo!()
     }
 
-    fn eq(&self, problem: Problem) -> ValueRef {
+    fn eq(&self, other: Self) -> Self {
         todo!()
     }
 }
@@ -74,9 +75,9 @@ impl<'t> GroupRef<'t> {
 }
 
 #[derive(Default)]
-struct NewQuery<R: Table> {
+struct NewQuery<R> {
     select: SelectStatement,
-    row: R::Target<'static>,
+    row: R,
 }
 
 struct QueryRef<'t> {
@@ -97,22 +98,39 @@ struct QueryOk {
     reify: ReifyResRef<'static>,
 }
 
+pub trait Row<'t> {
+    type Target<'a>: Row<'a>;
+
+    fn into_row(self) -> Vec<ValueRef<'t>>;
+    fn from_row(row: Vec<ValueRef<'t>>) -> Self;
+}
+
+pub trait IntoRow<'t> {}
+
 impl<R> NewQuery<R>
 where
-    R: Table,
+    R: Row<'static>,
 {
-    pub fn map<O: Table, F>(mut self, f: F) -> NewQuery<O>
+    pub fn map<O, F>(
+        mut self,
+        f: F,
+    ) -> NewQuery<<F as FnOnce<(QueryRef<'static>, R::Target<'static>)>>::Output>
     where
-        F: for<'a> FnOnce(QueryRef<'a>, R::Target<'a>) -> O::Target<'a>,
+        F: for<'t> FnOnce<(QueryRef<'t>, R::Target<'t>)>,
+        for<'t> <F as FnOnce<(QueryRef<'t>, R::Target<'t>)>>::Output: Row<'t>,
     {
         let q = QueryRef {
             select: &mut self.select,
             _p: PhantomData,
         };
-        NewQuery {
-            select: self.select,
-            row: f(q, self.row),
-        }
+        // let f = Box::new(f)
+        //     as Box<dyn FnOnce(QueryRef<'static>, R::Target<'static>) -> Ref<'static, O>>;
+
+        // NewQuery {
+        //     select: self.select,
+        //     row: f(q, self.row.cast()).inner,
+        // }
+        todo!()
     }
 
     pub fn contains<'t>(self, val: impl Row<'t>) -> ValueRef<'t> {
@@ -132,7 +150,7 @@ impl<'t> QueryRef<'t> {
             .take();
     }
 
-    pub fn flat_map<O: Table>(&mut self, mut other: NewQuery<O>) -> O::Target<'t> {
+    pub fn flat_map<O: Row<'static>>(&mut self, mut other: NewQuery<O>) -> O::Target<'t> {
         let (alias1, alias2) = (iden(), iden());
         *self.select = Query::select()
             .from_subquery(self.select.take(), alias1)
@@ -145,7 +163,8 @@ impl<'t> QueryRef<'t> {
             .expr(Expr::table_asterisk(alias1))
             .expr(Expr::table_asterisk(alias2))
             .take();
-        other.row
+        // other.row
+        todo!()
     }
 
     // self is borrowed, because we need to mutate it to do group operations
@@ -160,6 +179,10 @@ impl<'t> QueryRef<'t> {
         for expr in order.into_row() {
             self.select.order_by_expr(expr.inner, Order::Asc);
         }
+    }
+
+    pub fn test(&mut self) -> ValueRef<'t> {
+        todo!()
     }
 
     pub fn map<T, F>(self, f: F) -> ReifyResRef<'t>
@@ -185,24 +208,30 @@ where
     // query.ma
 }
 
-fn sub_query<O: Table, F>(f: F) -> NewQuery<O>
+fn sub_query<F>(f: F) -> NewQuery<<F as GeneratesRow<'static>>::Item>
 where
-    F: for<'t> FnOnce(QueryRef<'t>) -> O::Target<'t>,
+    F: for<'t> GeneratesRow<'t>,
 {
     let query = NewQuery::<Empty>::default();
-    query.map(|q, r| f(q))
+    // query.map(|q, r| f(q))
+    todo!()
 }
 
-pub trait Table {
-    type Target<'t>: Row<'t>;
+pub trait GeneratesRow<'t>: FnOnce(QueryRef<'t>) -> Self::Item {
+    type Item: Row<'t>;
 }
 
-pub trait Row<'t>: Table<Target<'t> = Self> {
-    fn into_row(self) -> Vec<ValueRef<'t>>;
-    fn from_row(row: Vec<ValueRef<'t>>) -> Self;
+impl<'t, F, I> GeneratesRow<'t> for F
+where
+    F: FnOnce(QueryRef<'t>) -> I,
+    I: Row<'t>,
+{
+    type Item = I;
 }
 
 impl<'t> Row<'t> for ValueRef<'t> {
+    type Target<'a> = ValueRef<'a>;
+
     fn into_row(self) -> Vec<ValueRef<'t>> {
         vec![self]
     }
@@ -212,11 +241,13 @@ impl<'t> Row<'t> for ValueRef<'t> {
     }
 }
 
-impl<'a> Table for ValueRef<'a> {
-    type Target<'t> = ValueRef<'t>;
+pub fn test() {
+    let x = sub_query(|mut q: QueryRef| q.test());
 }
 
 impl<'t, A: Row<'t>, B: Row<'t>> Row<'t> for (A, B) {
+    type Target<'a> = (A::Target<'a>, B::Target<'a>);
+
     fn into_row(self) -> Vec<ValueRef<'t>> {
         let mut res = self.0.into_row();
         res.extend(self.1.into_row());
@@ -228,13 +259,12 @@ impl<'t, A: Row<'t>, B: Row<'t>> Row<'t> for (A, B) {
     }
 }
 
-impl<A: Table, B: Table> Table for (A, B) {
-    type Target<'t> = (A::Target<'t>, B::Target<'t>);
-}
-
 #[derive(Default)]
 struct Empty;
+
 impl<'t> Row<'t> for Empty {
+    type Target<'a> = Empty;
+
     fn into_row(self) -> Vec<ValueRef<'t>> {
         vec![]
     }
@@ -244,10 +274,6 @@ impl<'t> Row<'t> for Empty {
     }
 }
 
-impl Table for Empty {
-    type Target<'t> = Empty;
-}
-
 struct Instance<'t> {
     timestamp: ValueRef<'t>,
     problem: ValueRef<'t>,
@@ -255,6 +281,8 @@ struct Instance<'t> {
 }
 
 impl<'t> Row<'t> for Instance<'t> {
+    type Target<'a> = Instance<'a>;
+
     fn into_row(self) -> Vec<ValueRef<'t>> {
         vec![self.timestamp, self.problem, self.seed]
     }
@@ -269,10 +297,6 @@ impl<'t> Row<'t> for Instance<'t> {
     }
 }
 
-impl<'a> Table for Instance<'a> {
-    type Target<'t> = Instance<'t>;
-}
-
 fn instances() -> NewQuery<Instance<'static>> {
     todo!()
 }
@@ -282,11 +306,9 @@ struct Execution<'t> {
     instance: ValueRef<'t>,
 }
 
-impl<'a> Table for Execution<'a> {
-    type Target<'t> = Execution<'t>;
-}
-
 impl<'t> Row<'t> for Execution<'t> {
+    type Target<'a> = Execution<'a>;
+
     fn into_row(self) -> Vec<ValueRef<'t>> {
         todo!()
     }
@@ -304,11 +326,9 @@ struct Solution<'t> {
     file_hash: ValueRef<'t>,
 }
 
-impl<'a> Table for Solution<'a> {
-    type Target<'t> = Solution<'t>;
-}
-
 impl<'t> Row<'t> for Solution<'t> {
+    type Target<'a> = Solution<'a>;
+
     fn into_row(self) -> Vec<ValueRef<'t>> {
         todo!()
     }
@@ -326,11 +346,9 @@ struct Problem<'t> {
     file_hash: ValueRef<'t>,
 }
 
-impl<'a> Table for Problem<'a> {
-    type Target<'t> = Problem<'t>;
-}
-
 impl<'t> Row<'t> for Problem<'t> {
+    type Target<'a> = Problem<'a>;
+
     fn into_row(self) -> Vec<ValueRef<'t>> {
         todo!()
     }
@@ -350,11 +368,9 @@ struct Submission<'t> {
     timestamp: ValueRef<'t>,
 }
 
-impl<'a> Table for Submission<'a> {
-    type Target<'t> = Submission<'t>;
-}
-
 impl<'t> Row<'t> for Submission<'t> {
+    type Target<'a> = Submission<'a>;
+
     fn into_row(self) -> Vec<ValueRef<'t>> {
         todo!()
     }
@@ -380,7 +396,7 @@ fn submissions() -> NewQuery<Submission<'static>> {
 }
 
 fn bench_instances() -> NewQuery<Instance<'static>> {
-    sub_query(|mut q| {
+    sub_query(|mut q: QueryRef| {
         let instance = q.flat_map(instances());
         let mut same_problem = q.group_by(instance.problem);
         let is_new = same_problem.rank(-instance.timestamp).lt(5);
@@ -394,13 +410,13 @@ fn bench_instances() -> NewQuery<Instance<'static>> {
 // which have not been executed
 fn bench_queue() -> QueryOk {
     // list of which solutions are submitted to which problems
-    let submissions = sub_query(|mut q| {
+    let submissions = sub_query(|mut q: QueryRef| {
         let submission = q.flat_map(submissions());
         (submission.solution, submission.problem)
     });
 
     // list of which solutions are executed on which instances
-    let executions = sub_query(|mut q| {
+    let executions = sub_query(|mut q: QueryRef| {
         let execution = q.flat_map(executions());
         (execution.solution, execution.instance)
     });
@@ -411,7 +427,7 @@ fn bench_queue() -> QueryOk {
         let solution = q.flat_map(solutions());
         let problem = q.flat_map(problems());
 
-        q.filter(instance.problem.eq(problem));
+        // q.filter(instance.problem.eq(problem));
         q.filter(submissions.contains((solution, problem)));
         q.filter(!executions.contains((solution, instance)));
 
