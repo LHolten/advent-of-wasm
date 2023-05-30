@@ -1,92 +1,130 @@
+use ghost_cell::GhostToken;
+use phtm::InvariantOverLt;
 use sea_query::{
     Alias, Cond, Expr, Func, Iden, JoinType, Order, OrderedStatement, Query, SelectStatement,
     SimpleExpr, WindowStatement,
 };
 use std::{
     marker::PhantomData,
-    ops::Not,
-    rc::Rc,
+    ops::{Add, Not},
     sync::atomic::{AtomicU64, Ordering},
 };
 
-pub fn iden() -> Rc<dyn Iden> {
-    static IDEN_NUM: AtomicU64 = AtomicU64::new(0);
-    let next = IDEN_NUM.fetch_add(1, Ordering::Relaxed);
-    Rc::new(Alias::new(&next.to_string()))
+pub fn iden<'t>() -> MyIden<'t> {
+    todo!()
 }
 
-#[derive(Clone)]
-pub struct ValueRef<'t> {
-    inner: SimpleExpr,
-    _p: PhantomData<&'t mut &'t ()>,
-}
-
-impl<'t> ValueRef<'t> {
-    pub fn from_expr(expr: impl Into<SimpleExpr>) -> Self {
-        Self {
-            inner: expr.into(),
-            _p: PhantomData,
-        }
+#[derive(Clone, Copy)]
+struct MyAlias(u64);
+impl MyAlias {
+    pub fn new() -> Self {
+        static IDEN_NUM: AtomicU64 = AtomicU64::new(0);
+        let next = IDEN_NUM.fetch_add(1, Ordering::Relaxed);
+        Self(next)
     }
 
-    pub fn lt(&self, arg: i32) -> Self {
+    pub fn iden<'t>(self) -> MyIden<'t> {
+        todo!()
+    }
+}
+
+impl Iden for MyAlias {
+    fn unquoted(&self, s: &mut dyn std::fmt::Write) {
+        write!(s, "{}", self.0).unwrap()
+    }
+}
+
+pub trait Value<'t>: Copy {
+    fn into_expr(self, t: &mut GhostToken<'t>) -> SimpleExpr;
+
+    fn add<T: Value<'t>>(self, rhs: T) -> MyAdd<Self, T> {
+        MyAdd(self, rhs)
+    }
+
+    fn lt(self, arg: i32) -> Self {
         todo!()
     }
 
-    pub fn eq(&self, other: Self) -> Self {
+    fn eq(self, other: Self) -> Self {
         todo!()
     }
 
-    pub fn neg(&self) -> Self {
-        let expr = Expr::expr(self.inner.clone()).mul(-1);
-        Self::from_expr(expr)
+    fn not(self) -> MyNot<Self> {
+        MyNot(self)
     }
 }
 
-impl<'t> Not for ValueRef<'t> {
-    type Output = Self;
+pub trait Row<'t>: Copy {
+    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr>;
+    // fn from_row(row: Vec<MyIden<'t>>) -> Self::Target<'t>;
+}
 
-    fn not(self) -> Self::Output {
-        let expr = Expr::expr(self.inner).not();
-        Self::from_expr(expr)
+#[derive(Clone, Copy)]
+pub struct MyIden<'t> {
+    name: MyAlias,
+    _t: InvariantOverLt<'t>,
+}
+
+impl<'t> Value<'t> for MyIden<'t> {
+    fn into_expr(self, t: &mut GhostToken<'t>) -> SimpleExpr {
+        Expr::col(self.name).into()
     }
 }
 
-pub struct GroupRef<'a, 't> {
-    select: &'a mut SelectStatement,
-    group: Vec<ValueRef<'t>>,
+#[derive(Clone, Copy)]
+pub struct MyAdd<A, B>(A, B);
+
+impl<'t, A: Value<'t>, B: Value<'t>> Value<'t> for MyAdd<A, B> {
+    fn into_expr(self, t: &mut GhostToken<'t>) -> SimpleExpr {
+        self.0.into_expr(t).add(self.1.into_expr(t))
+    }
 }
 
-impl<'a, 't> GroupRef<'a, 't> {
-    fn rank_internal(&mut self, val: impl Row<'t>, order: Order) -> ValueRef<'t> {
+#[derive(Clone, Copy)]
+pub struct MyNot<T>(T);
+
+impl<'t, T: Value<'t>> Value<'t> for MyNot<T> {
+    fn into_expr(self, t: &mut GhostToken<'t>) -> SimpleExpr {
+        self.0.into_expr(t).not()
+    }
+}
+
+pub struct GroupRef<'a, 't, G> {
+    query: &'a mut QueryRef<'t>,
+    group: G,
+}
+
+impl<'a, 't, G: Row<'t>> GroupRef<'a, 't, G> {
+    fn rank_internal(&mut self, val: impl Row<'t>, order: Order) -> MyIden<'t> {
         let mut window = WindowStatement::new();
-        for expr in val.into_row() {
-            window.order_by_expr(expr.inner, order.clone());
+        for expr in val.into_row(&mut self.query.token) {
+            window.order_by_expr(expr, order.clone());
         }
-        let alias = iden();
-        self.select
-            .expr_window_as(Func::cust(Alias::new("ROW_NUMBER")), window, alias.clone());
-        ValueRef::from_expr(Expr::col(alias))
+        let alias = MyAlias::new();
+        self.query
+            .select
+            .expr_window_as(Func::cust(Alias::new("ROW_NUMBER")), window, alias);
+        alias.iden()
     }
 
-    pub fn rank_asc(&mut self, val: impl Row<'t>) -> ValueRef<'t> {
+    pub fn rank_asc(&mut self, val: impl Row<'t>) -> MyIden<'t> {
         self.rank_internal(val, Order::Asc)
     }
 
-    pub fn rank_desc(&mut self, val: impl Row<'t>) -> ValueRef<'t> {
+    pub fn rank_desc(&mut self, val: impl Row<'t>) -> MyIden<'t> {
         self.rank_internal(val, Order::Desc)
     }
 }
 
 #[derive(Default)]
-pub struct NewQuery<R> {
+pub struct SubQuery<R> {
     select: SelectStatement,
     row: R,
 }
 
 pub struct QueryRef<'t> {
     select: &'t mut SelectStatement,
-    _p: PhantomData<&'t mut &'t ()>,
+    token: GhostToken<'t>,
 }
 
 pub struct ReifyRef<'t> {
@@ -102,80 +140,81 @@ pub struct QueryOk {
     reify: ReifyResRef<'static>,
 }
 
-pub trait Row<'t> {
-    type Target<'a>: Row<'a>;
-
-    fn into_row(&self) -> Vec<ValueRef<'t>>;
-    fn from_row(row: Vec<ValueRef<'t>>) -> Self::Target<'t>;
+#[derive(Clone, Copy)]
+struct Contains<'a, R> {
+    list: &'a SubQuery<R>,
+    val: R,
 }
 
-impl<R> NewQuery<R>
-where
-    R: Row<'static>,
-{
+impl<'a, 't, R: Row<'t>> Value<'t> for Contains<'a, R> {
+    fn into_expr(self, t: &mut GhostToken<'t>) -> SimpleExpr {
+        let val = self.val.into_row(t);
+        let tuple = Expr::tuple(val);
+        tuple.in_subquery(self.list.select.clone())
+    }
+}
+
+impl<'t, R: Row<'t>> SubQuery<R> {
     pub fn new<F>(f: F) -> Self
     where
-        for<'t> F: FnOnce(QueryRef<'t>) -> MapResRef<R>,
+        F: FnOnce(QueryRef<'t>) -> R,
     {
-        let mut select = Query::select();
-        let q = QueryRef {
-            select: &mut select,
-            _p: PhantomData,
-        };
-        NewQuery {
-            select,
-            row: f(q).val,
-        }
+        // GhostToken::new(|token| {
+        //     let mut select = Query::select();
+        //     let q = QueryRef {
+        //         select: &mut select,
+        //         token,
+        //     };
+        //     let row = f(q);
+        //     SubQuery { select, row }
+        // })
+        todo!()
     }
 
-    pub fn contains<'t>(self, val: R::Target<'t>) -> ValueRef<'t> {
-        let val = val.into_row();
-        let tuple = Expr::tuple(val.into_iter().map(|x| x.inner));
-        ValueRef::from_expr(tuple.in_subquery(self.select))
+    pub fn contains(&self, val: R) -> impl Value<'t> + '_ {
+        Contains { list: self, val }
     }
 }
 
 impl<'t> QueryRef<'t> {
-    pub fn filter(&mut self, cond: ValueRef<'t>) {
+    pub fn filter(&mut self, cond: impl Value<'t>) {
         let alias = iden();
-        *self.select = Query::select()
-            .from_subquery(self.select.take(), alias.clone())
-            .and_where(cond.inner)
-            .expr(Expr::table_asterisk(alias))
-            .take();
+        // *self.select = Query::select()
+        //     .from_subquery(self.select.take(), alias.clone())
+        //     .and_where(cond.into_expr(&mut self.token))
+        //     .expr(Expr::table_asterisk(alias))
+        //     .take();
+        todo!()
     }
 
-    pub fn flat_map<O: Row<'static>>(&mut self, mut other: NewQuery<O>) -> O::Target<'t> {
+    pub fn flat_map<O: Row<'t>>(&mut self, mut other: SubQuery<O>) -> O {
         let (alias1, alias2) = (iden(), iden());
-        *self.select = Query::select()
-            .from_subquery(self.select.take(), alias1.clone())
-            .join_subquery(
-                JoinType::InnerJoin,
-                other.select.take(),
-                alias2.clone(),
-                Cond::all(),
-            )
-            .expr(Expr::table_asterisk(alias1))
-            .expr(Expr::table_asterisk(alias2))
-            .take();
+        // *self.select = Query::select()
+        //     .from_subquery(self.select.take(), alias1.clone())
+        //     .join_subquery(
+        //         JoinType::InnerJoin,
+        //         other.select.take(),
+        //         alias2.clone(),
+        //         Cond::all(),
+        //     )
+        //     .expr(Expr::table_asterisk(alias1))
+        //     .expr(Expr::table_asterisk(alias2))
+        //     .take();
         other.row
     }
 
     // self is borrowed, because we need to mutate it to do group operations
-    pub fn group_by<'a>(&'a mut self, group: impl Row<'t>) -> GroupRef<'a, 't> {
-        GroupRef {
-            select: &mut self.select,
-            group: group.into_row(),
-        }
+    pub fn group_by<'a, G: Row<'t>>(&'a mut self, group: G) -> GroupRef<'a, 't, G> {
+        GroupRef { query: self, group }
     }
 
     pub fn sort_by(&mut self, order: impl Row<'t>) {
-        for expr in order.into_row() {
-            self.select.order_by_expr(expr.inner, Order::Asc);
+        for expr in order.into_row(&mut self.token) {
+            self.select.order_by_expr(expr, Order::Asc);
         }
     }
 
-    pub fn test(&mut self) -> ValueRef<'t> {
+    pub fn test(&mut self) -> MyIden<'t> {
         todo!()
     }
 
@@ -185,88 +224,64 @@ impl<'t> QueryRef<'t> {
     {
         todo!()
     }
-
-    pub fn map<V: Row<'t>>(self, val: V) -> MapResRef<V::Target<'static>> {
-        todo!()
-    }
 }
 
 impl<'t> ReifyRef<'t> {
-    pub fn get<V>(&mut self, v: &ValueRef<'t>) -> V {
+    pub fn get<V>(&mut self, v: impl Value<'t>) -> V {
         todo!()
     }
-}
-
-pub struct MapResRef<O> {
-    val: O,
 }
 
 pub fn query<F>(f: F) -> QueryOk
 where
     F: for<'t> FnOnce(QueryRef<'t>) -> ReifyResRef<'t>,
 {
-    let query = NewQuery::<Empty>::default();
+    let query = SubQuery::<Empty>::default();
     todo!()
     // query.ma
 }
 
-pub fn sub_query<O, F>(f: F) -> NewQuery<O>
+pub fn sub_query<'t, F>(f: F) -> SubQuery<<F as SubQueryFunc<'t>>::Out>
 where
-    for<'t> F: FnOnce(QueryRef<'t>) -> MapResRef<O>,
-    O: Row<'static>,
+    F: for<'a> SubQueryFunc<'a>,
 {
-    NewQuery::new(f)
+    todo!()
 }
 
-impl<'t> Row<'t> for ValueRef<'t> {
-    type Target<'a> = ValueRef<'a>;
-
-    fn into_row(&self) -> Vec<ValueRef<'t>> {
-        vec![self.clone()]
-    }
-
-    fn from_row(row: Vec<ValueRef<'t>>) -> Self {
-        row[0].clone()
-    }
+pub trait SubQueryFunc<'t>
+where
+    Self: FnOnce(QueryRef<'t>) -> Self::Out,
+{
+    type Out: Row<'t>;
 }
 
-impl<'x, 't, T: Row<'t>> Row<'t> for &'x T {
-    type Target<'a> = T::Target<'a>;
+impl<'t, O, F> SubQueryFunc<'t> for F
+where
+    F: FnOnce(QueryRef<'t>) -> O,
+    O: Row<'t>,
+{
+    type Out = O;
+}
 
-    fn into_row(&self) -> Vec<ValueRef<'t>> {
-        T::into_row(*self)
-    }
-
-    fn from_row(row: Vec<ValueRef<'t>>) -> Self::Target<'t> {
-        T::from_row(row)
+impl<'t, T: Value<'t>> Row<'t> for T {
+    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr> {
+        vec![self.into_expr(t)]
     }
 }
 
 impl<'t, A: Row<'t>, B: Row<'t>> Row<'t> for (A, B) {
-    type Target<'a> = (A::Target<'a>, B::Target<'a>);
-
-    fn into_row(&self) -> Vec<ValueRef<'t>> {
-        let mut res = self.0.into_row();
-        res.extend(self.1.into_row());
+    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr> {
+        let mut res = self.0.into_row(t);
+        res.extend(self.1.into_row(t));
         res
-    }
-
-    fn from_row(row: Vec<ValueRef<'t>>) -> Self::Target<'t> {
-        todo!()
     }
 }
 
-#[derive(Default)]
-struct Empty;
+#[derive(Default, Clone, Copy)]
+pub struct Empty;
 
 impl<'t> Row<'t> for Empty {
-    type Target<'a> = Empty;
-
-    fn into_row(&self) -> Vec<ValueRef<'t>> {
+    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr> {
         vec![]
-    }
-
-    fn from_row(row: Vec<ValueRef<'t>>) -> Self {
-        Empty
     }
 }
