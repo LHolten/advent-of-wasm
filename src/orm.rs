@@ -3,7 +3,8 @@ pub mod value;
 
 use phtm::{CovariantOverLt, InvariantOverLt};
 use sea_query::{
-    Alias, Expr, Func, Iden, Order, OrderedStatement, SelectStatement, SimpleExpr, WindowStatement,
+    Alias, Expr, Func, Iden, Order, OrderedStatement, Query, SelectStatement, SimpleExpr,
+    WindowStatement,
 };
 use std::{
     marker::PhantomData,
@@ -66,15 +67,48 @@ impl<'a, 't, G: Row<'t>> GroupRef<'a, 't, G> {
     }
 }
 
-#[derive(Default)]
-pub struct SubQuery<R> {
+struct SubQueryRes<R> {
     select: SelectStatement,
     row: R,
 }
 
+#[derive(Default, Clone, Copy)]
+pub struct SubQuery<F>(F);
+
+impl<F> SubQuery<F> {
+    pub const fn new(func: F) -> Self
+    where
+        F: for<'a> SubQueryFunc<'a> + Copy,
+    {
+        SubQuery(func)
+    }
+
+    fn into_res<'t>(self) -> SubQueryRes<F::Out>
+    where
+        F: SubQueryFunc<'t>,
+    {
+        let mut query = QueryRef {
+            select: Query::select(),
+            _t: PhantomData,
+        };
+        let row = (self.0)(&mut query);
+        SubQueryRes {
+            select: query.select,
+            row,
+        }
+    }
+
+    pub fn contains<'t>(self, val: F::Out) -> impl Value<'t>
+    where
+        F: SubQueryFunc<'t> + Copy,
+    {
+        Contains { func: self.0, val }
+    }
+}
+
 pub struct QueryRef<'t> {
-    select: &'t mut SelectStatement,
-    token: InvariantOverLt<'t>,
+    select: SelectStatement,
+    _t: InvariantOverLt<'t>,
 }
 
 pub struct Table<'t> {
@@ -96,12 +130,15 @@ pub struct QueryOk {
 }
 
 #[derive(Clone, Copy)]
-struct Contains<'a, R> {
-    list: &'a SubQuery<R>,
-    val: R,
+struct Contains<'t, F>
+where
+    F: SubQueryFunc<'t>,
+{
+    func: F,
+    val: F::Out,
 }
 
-impl<'a, 't, R: Row<'t>> Value<'t> for Contains<'a, R> {
+impl<'t, F: SubQueryFunc<'t> + Copy> Value<'t> for Contains<'t, F> {
     fn into_expr(self) -> SimpleExpr {
         let val = self.val.into_row();
         let tuple = Expr::tuple(val);
@@ -112,28 +149,6 @@ impl<'a, 't, R: Row<'t>> Value<'t> for Contains<'a, R> {
         //         .take(),
         // )
         todo!()
-    }
-}
-
-impl<'t, R: Row<'t>> SubQuery<R> {
-    pub fn new<F>(f: F) -> Self
-    where
-        F: FnOnce(QueryRef<'t>) -> R,
-    {
-        // GhostToken::new(|token| {
-        //     let mut select = Query::select();
-        //     let q = QueryRef {
-        //         select: &mut select,
-        //         token,
-        //     };
-        //     let row = f(q);
-        //     SubQuery { select, row }
-        // })
-        todo!()
-    }
-
-    pub fn contains(&self, val: R) -> impl Value<'t> + '_ {
-        Contains { list: self, val }
     }
 }
 
@@ -148,7 +163,7 @@ impl<'t> QueryRef<'t> {
         todo!()
     }
 
-    pub fn flat_map<O: Row<'t>>(&mut self, mut other: SubQuery<O>) -> O {
+    pub fn flat_map<F: SubQueryFunc<'t>>(&mut self, mut other: SubQuery<F>) -> F::Out {
         let (alias1, alias2) = (iden(), iden());
         // *self.select = Query::select()
         //     .from_subquery(self.select.take(), alias1.clone())
@@ -161,7 +176,7 @@ impl<'t> QueryRef<'t> {
         //     .expr(Expr::table_asterisk(alias1))
         //     .expr(Expr::table_asterisk(alias2))
         //     .take();
-        other.row
+        other.into_res().row
     }
 
     // // the query has a shorter, but unknown lifetime.
@@ -210,23 +225,16 @@ where
     // query.ma
 }
 
-pub fn sub_query<'t, F>(f: F) -> SubQuery<<F as SubQueryFunc<'t>>::Out>
-where
-    F: for<'a> SubQueryFunc<'a>,
-{
-    todo!()
-}
-
 pub trait SubQueryFunc<'t>
 where
-    Self: FnOnce(QueryRef<'t>) -> Self::Out,
+    Self: FnOnce(&mut QueryRef<'t>) -> Self::Out,
 {
     type Out: Row<'t>;
 }
 
 impl<'t, O, F> SubQueryFunc<'t> for F
 where
-    F: FnOnce(QueryRef<'t>) -> O,
+    F: FnOnce(&mut QueryRef<'t>) -> O,
     O: Row<'t>,
 {
     type Out = O;

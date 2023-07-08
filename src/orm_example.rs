@@ -5,7 +5,6 @@ use sea_query::SimpleExpr;
 use crate::orm::{
     query,
     row::Row,
-    sub_query,
     value::{MyIden, Value},
     QueryOk, QueryRef, ReifyResRef, SubQuery,
 };
@@ -39,7 +38,7 @@ impl<'t> Row<'t> for Instance<'t> {
     // }
 }
 
-fn instances<'t>() -> SubQuery<Instance<'t>> {
+fn instances<'t>(q: &mut QueryRef<'t>) -> Instance<'t> {
     todo!()
 }
 
@@ -59,7 +58,7 @@ impl<'t> Row<'t> for Execution<'t> {
     // }
 }
 
-fn executions<'t>() -> SubQuery<Execution<'t>> {
+fn executions<'t>(q: &mut QueryRef<'t>) -> Execution<'t> {
     todo!()
 }
 
@@ -79,7 +78,7 @@ impl<'t> Row<'t> for Solution<'t> {
     // }
 }
 
-fn solutions<'t>() -> SubQuery<Solution<'t>> {
+fn solutions<'t>(q: &mut QueryRef<'t>) -> Solution<'t> {
     todo!()
 }
 
@@ -99,7 +98,7 @@ impl<'t> Row<'t> for Problem<'t> {
     // }
 }
 
-fn problems<'t>() -> SubQuery<Problem<'t>> {
+fn problems<'t>(q: &mut QueryRef<'t>) -> Problem<'t> {
     todo!()
 }
 
@@ -120,7 +119,7 @@ impl<'t> Row<'t> for Submission<'t> {
     // }
 }
 
-fn submissions<'t>() -> SubQuery<Submission<'t>> {
+fn submissions<'t>(q: &mut QueryRef<'t>) -> Submission<'t> {
     // let alias = iden();
     // SubQuery {
     //     select: Query::select()
@@ -136,29 +135,23 @@ fn submissions<'t>() -> SubQuery<Submission<'t>> {
     todo!()
 }
 
-fn bench_instances<'a>() -> SubQuery<Instance<'a>> {
-    sub_query(for<'t> |mut q: QueryRef<'t>| -> Instance<'t> {
-        let instance = q.flat_map(instances());
-        let mut same_problem = q.group_by(instance.problem);
-        let is_new = same_problem.rank_desc(instance.timestamp).lt(5);
-        q.filter(is_new);
-        q.sort_by(instance.timestamp);
-        instance
-    })
+fn bench_instances<'t>(q: &mut QueryRef<'t>) -> Instance<'t> {
+    let instance = q.flat_map(SubQuery::new(instances));
+    let mut same_problem = q.group_by(instance.problem);
+    let is_new = same_problem.rank_desc(instance.timestamp).lt(5);
+    q.filter(is_new);
+    q.sort_by(instance.timestamp);
+    instance
 }
 
-fn sol_prob<'a>() -> SubQuery<(MyIden<'a>, MyIden<'a>)> {
-    sub_query(for<'t> |mut q: QueryRef<'t>| -> (MyIden<'t>, MyIden<'t>) {
-        let submission = q.flat_map(submissions());
-        (submission.solution, submission.problem)
-    })
+fn sol_prob<'t>(q: &mut QueryRef<'t>) -> (MyIden<'t>, MyIden<'t>) {
+    let submission = q.flat_map(SubQuery::new(submissions));
+    (submission.solution, submission.problem)
 }
 
-fn sol_inst<'a>() -> SubQuery<(MyIden<'a>, MyIden<'a>)> {
-    sub_query(for<'t> |mut q: QueryRef<'t>| -> (MyIden<'t>, MyIden<'t>) {
-        let execution = q.flat_map(executions());
-        (execution.solution, execution.instance)
-    })
+fn sol_inst<'t>(q: &mut QueryRef<'t>) -> (MyIden<'t>, MyIden<'t>) {
+    let execution = q.flat_map(SubQuery::new(executions));
+    (execution.solution, execution.instance)
 }
 
 // last five problem-instances for each problem
@@ -166,15 +159,15 @@ fn sol_inst<'a>() -> SubQuery<(MyIden<'a>, MyIden<'a>)> {
 fn bench_queue() -> QueryOk {
     query(for<'a> |mut q: QueryRef<'a>| -> ReifyResRef<'a> {
         // list of which solutions are submitted to which problems
-        let submissions = sol_prob();
+        let submissions = SubQuery::new(sol_prob);
 
         // list of which solutions are executed on which instances
-        let executions = sol_inst();
+        let executions = SubQuery::new(sol_inst);
 
         // the relevant tables for our query
-        let instance = q.flat_map(bench_instances());
-        let solution = q.flat_map(solutions());
-        let problem = q.flat_map(problems());
+        let instance = q.flat_map(SubQuery::new(bench_instances));
+        let solution = q.flat_map(SubQuery::new(solutions));
+        let problem = q.flat_map(SubQuery::new(problems));
 
         q.filter(instance.problem.eq(problem.id));
         q.filter(submissions.contains((solution.id, problem.id)));
