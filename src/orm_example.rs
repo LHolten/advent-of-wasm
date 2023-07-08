@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use std::{cell::OnceCell, ops::Deref};
+
 use sea_query::SimpleExpr;
 
 use crate::orm::{
@@ -136,7 +138,7 @@ fn submissions<'t>(q: &mut QueryRef<'t>) -> Submission<'t> {
 }
 
 fn bench_instances<'t>(q: &mut QueryRef<'t>) -> Instance<'t> {
-    let instance = q.flat_map(SubQuery::new(instances));
+    let instance = q.join(instances);
     let mut same_problem = q.group_by(instance.problem);
     let is_new = same_problem.rank_desc(instance.timestamp).lt(5);
     q.filter(is_new);
@@ -145,12 +147,12 @@ fn bench_instances<'t>(q: &mut QueryRef<'t>) -> Instance<'t> {
 }
 
 fn sol_prob<'t>(q: &mut QueryRef<'t>) -> (MyIden<'t>, MyIden<'t>) {
-    let submission = q.flat_map(SubQuery::new(submissions));
+    let submission = q.join(submissions);
     (submission.solution, submission.problem)
 }
 
 fn sol_inst<'t>(q: &mut QueryRef<'t>) -> (MyIden<'t>, MyIden<'t>) {
-    let execution = q.flat_map(SubQuery::new(executions));
+    let execution = q.join(executions);
     (execution.solution, execution.instance)
 }
 
@@ -165,9 +167,9 @@ fn bench_queue() -> QueryOk {
         let executions = SubQuery::new(sol_inst);
 
         // the relevant tables for our query
-        let instance = q.flat_map(SubQuery::new(bench_instances));
-        let solution = q.flat_map(SubQuery::new(solutions));
-        let problem = q.flat_map(SubQuery::new(problems));
+        let instance = q.join(bench_instances);
+        let solution = q.join(solutions);
+        let problem = q.join(problems);
 
         q.filter(instance.problem.eq(problem.id));
         q.filter(submissions.contains((solution.id, problem.id)));
@@ -186,3 +188,19 @@ struct QueuedExecution {
     solution_hash: u64,
     problem_hash: u64,
 }
+
+// pub fn boom<'t>(q: &mut QueryRef<'t>) {
+//     // list of which solutions are submitted to which problems
+//     let submissions = SubQuery::new(sol_prob);
+
+//     let thing: Instance<'_> = q.flat_map(SubQuery::new(bench_instances));
+
+//     let mut val: Option<Instance<'_>> = None;
+//     let my_query = SubQuery::new(|q: &mut QueryRef<'t>| {
+//         // q.filter(thing.problem);
+//         val = Some(q.flat_map(SubQuery::new(bench_instances)));
+//         todo!()
+//     });
+
+//     // q.filter(val.unwrap().problem);
+// }

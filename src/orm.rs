@@ -1,7 +1,7 @@
 pub mod row;
 pub mod value;
 
-use phtm::{CovariantOverLt, InvariantOverLt};
+use phtm::InvariantOverLt;
 use sea_query::{
     Alias, Expr, Func, Iden, Order, OrderedStatement, Query, SelectStatement, SimpleExpr,
     WindowStatement,
@@ -12,7 +12,7 @@ use std::{
 };
 
 use self::{
-    row::{DynRow, Empty, Row},
+    row::{Empty, Row},
     value::{MyIden, Value},
 };
 
@@ -67,11 +67,13 @@ impl<'a, 't, G: Row<'t>> GroupRef<'a, 't, G> {
     }
 }
 
-struct SubQueryRes<R> {
+pub struct SubQueryRes<R> {
     select: SelectStatement,
     row: R,
 }
 
+/// invariant is that `F` doesn't depend on anything else and nothing depends on it
+/// this is checked by [SubQuery::new]
 #[derive(Default, Clone, Copy)]
 pub struct SubQuery<F>(F);
 
@@ -81,21 +83,6 @@ impl<F> SubQuery<F> {
         F: for<'a> SubQueryFunc<'a> + Copy,
     {
         SubQuery(func)
-    }
-
-    fn into_res<'t>(self) -> SubQueryRes<F::Out>
-    where
-        F: SubQueryFunc<'t>,
-    {
-        let mut query = QueryRef {
-            select: Query::select(),
-            _t: PhantomData,
-        };
-        let row = (self.0)(&mut query);
-        SubQueryRes {
-            select: query.select,
-            row,
-        }
     }
 
     pub fn contains<'t>(self, val: F::Out) -> impl Value<'t>
@@ -111,17 +98,12 @@ pub struct QueryRef<'t> {
     _t: InvariantOverLt<'t>,
 }
 
-pub struct Table<'t> {
-    select: SelectStatement,
-    _t: CovariantOverLt<'t>,
-}
-
 pub struct ReifyRef<'t> {
-    _p: PhantomData<&'t mut &'t ()>,
+    _t: InvariantOverLt<'t>,
 }
 
 pub struct ReifyResRef<'t> {
-    _p: PhantomData<&'t mut &'t ()>,
+    _t: InvariantOverLt<'t>,
 }
 
 pub struct QueryOk {
@@ -163,7 +145,10 @@ impl<'t> QueryRef<'t> {
         todo!()
     }
 
-    pub fn flat_map<F: SubQueryFunc<'t>>(&mut self, mut other: SubQuery<F>) -> F::Out {
+    pub fn join<F>(&mut self, mut other: F) -> <F as SubQueryFunc<'t>>::Out
+    where
+        F: for<'a> SubQueryFunc<'a>,
+    {
         let (alias1, alias2) = (iden(), iden());
         // *self.select = Query::select()
         //     .from_subquery(self.select.take(), alias1.clone())
@@ -225,11 +210,23 @@ where
     // query.ma
 }
 
-pub trait SubQueryFunc<'t>
+pub trait SubQueryFunc<'t>: Sized
 where
     Self: FnOnce(&mut QueryRef<'t>) -> Self::Out,
 {
     type Out: Row<'t>;
+
+    fn into_res(self) -> SubQueryRes<Self::Out> {
+        let mut query = QueryRef {
+            select: Query::select(),
+            _t: PhantomData,
+        };
+        let row = (self)(&mut query);
+        SubQueryRes {
+            select: query.select,
+            row,
+        }
+    }
 }
 
 impl<'t, O, F> SubQueryFunc<'t> for F

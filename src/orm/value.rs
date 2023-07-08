@@ -1,6 +1,5 @@
-use phtm::CovariantOverLt;
+use phtm::CovariantOver;
 use sea_query::{Expr, SimpleExpr};
-use std::ops::{Add, Not};
 
 use super::MyAlias;
 
@@ -27,7 +26,7 @@ pub trait Value<'t>: Copy {
 #[derive(Clone, Copy)]
 pub struct MyIden<'t> {
     name: MyAlias,
-    _t: CovariantOverLt<'t>,
+    _t: CovariantOver<&'t ()>,
 }
 
 impl<'t> Value<'t> for MyIden<'t> {

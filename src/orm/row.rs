@@ -1,11 +1,11 @@
-use phtm::{CovariantOverLt, PhantomData};
+use phtm::{CovariantOver, PhantomData};
 use sea_query::SimpleExpr;
 
 use super::value::Value;
 
 pub struct DynRow<'t> {
     list: Vec<SimpleExpr>,
-    _t: CovariantOverLt<'t>,
+    _t: CovariantOver<&'t ()>,
 }
 
 pub trait Row<'t>: Copy {
