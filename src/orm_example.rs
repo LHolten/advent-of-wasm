@@ -1,8 +1,13 @@
-use ghost_cell::GhostToken;
-use sea_query::{Alias, Expr, Query, SimpleExpr};
+#![allow(unused)]
+
+use sea_query::SimpleExpr;
 
 use crate::orm::{
-    iden, query, sub_query, Empty, MyIden, QueryOk, QueryRef, ReifyResRef, Row, SubQuery, Value,
+    query,
+    row::Row,
+    sub_query,
+    value::{MyIden, Value},
+    QueryOk, QueryRef, ReifyResRef, SubQuery,
 };
 
 #[derive(Clone, Copy)]
@@ -14,12 +19,12 @@ struct Instance<'t> {
 }
 
 impl<'t> Row<'t> for Instance<'t> {
-    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr> {
+    fn into_row(&self) -> Vec<SimpleExpr> {
         vec![
-            self.id.into_expr(t),
-            self.timestamp.into_expr(t),
-            self.problem.into_expr(t),
-            self.seed.into_expr(t),
+            self.id.into_expr(),
+            self.timestamp.into_expr(),
+            self.problem.into_expr(),
+            self.seed.into_expr(),
         ]
     }
 
@@ -45,7 +50,7 @@ struct Execution<'t> {
 }
 
 impl<'t> Row<'t> for Execution<'t> {
-    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr> {
+    fn into_row(&self) -> Vec<SimpleExpr> {
         todo!()
     }
 
@@ -65,7 +70,7 @@ struct Solution<'t> {
 }
 
 impl<'t> Row<'t> for Solution<'t> {
-    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr> {
+    fn into_row(&self) -> Vec<SimpleExpr> {
         todo!()
     }
 
@@ -85,7 +90,7 @@ struct Problem<'t> {
 }
 
 impl<'t> Row<'t> for Problem<'t> {
-    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr> {
+    fn into_row(&self) -> Vec<SimpleExpr> {
         todo!()
     }
 
@@ -106,7 +111,7 @@ struct Submission<'t> {
 }
 
 impl<'t> Row<'t> for Submission<'t> {
-    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr> {
+    fn into_row(&self) -> Vec<SimpleExpr> {
         todo!()
     }
 

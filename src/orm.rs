@@ -1,13 +1,18 @@
-use ghost_cell::GhostToken;
-use phtm::InvariantOverLt;
+pub mod row;
+pub mod value;
+
+use phtm::{CovariantOverLt, InvariantOverLt};
 use sea_query::{
-    Alias, Cond, Expr, Func, Iden, JoinType, Order, OrderedStatement, Query, SelectStatement,
-    SimpleExpr, WindowStatement,
+    Alias, Expr, Func, Iden, Order, OrderedStatement, SelectStatement, SimpleExpr, WindowStatement,
 };
 use std::{
     marker::PhantomData,
-    ops::{Add, Not},
     sync::atomic::{AtomicU64, Ordering},
+};
+
+use self::{
+    row::{DynRow, Empty, Row},
+    value::{MyIden, Value},
 };
 
 pub fn iden<'t>() -> MyIden<'t> {
@@ -34,61 +39,6 @@ impl Iden for MyAlias {
     }
 }
 
-pub trait Value<'t>: Copy {
-    fn into_expr(self, t: &mut GhostToken<'t>) -> SimpleExpr;
-
-    fn add<T: Value<'t>>(self, rhs: T) -> MyAdd<Self, T> {
-        MyAdd(self, rhs)
-    }
-
-    fn lt(self, arg: i32) -> Self {
-        todo!()
-    }
-
-    fn eq(self, other: Self) -> Self {
-        todo!()
-    }
-
-    fn not(self) -> MyNot<Self> {
-        MyNot(self)
-    }
-}
-
-pub trait Row<'t>: Copy {
-    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr>;
-    // fn from_row(row: Vec<MyIden<'t>>) -> Self::Target<'t>;
-}
-
-#[derive(Clone, Copy)]
-pub struct MyIden<'t> {
-    name: MyAlias,
-    _t: InvariantOverLt<'t>,
-}
-
-impl<'t> Value<'t> for MyIden<'t> {
-    fn into_expr(self, t: &mut GhostToken<'t>) -> SimpleExpr {
-        Expr::col(self.name).into()
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct MyAdd<A, B>(A, B);
-
-impl<'t, A: Value<'t>, B: Value<'t>> Value<'t> for MyAdd<A, B> {
-    fn into_expr(self, t: &mut GhostToken<'t>) -> SimpleExpr {
-        self.0.into_expr(t).add(self.1.into_expr(t))
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct MyNot<T>(T);
-
-impl<'t, T: Value<'t>> Value<'t> for MyNot<T> {
-    fn into_expr(self, t: &mut GhostToken<'t>) -> SimpleExpr {
-        self.0.into_expr(t).not()
-    }
-}
-
 pub struct GroupRef<'a, 't, G> {
     query: &'a mut QueryRef<'t>,
     group: G,
@@ -97,7 +47,7 @@ pub struct GroupRef<'a, 't, G> {
 impl<'a, 't, G: Row<'t>> GroupRef<'a, 't, G> {
     fn rank_internal(&mut self, val: impl Row<'t>, order: Order) -> MyIden<'t> {
         let mut window = WindowStatement::new();
-        for expr in val.into_row(&mut self.query.token) {
+        for expr in val.into_row() {
             window.order_by_expr(expr, order.clone());
         }
         let alias = MyAlias::new();
@@ -124,7 +74,12 @@ pub struct SubQuery<R> {
 
 pub struct QueryRef<'t> {
     select: &'t mut SelectStatement,
-    token: GhostToken<'t>,
+    token: InvariantOverLt<'t>,
+}
+
+pub struct Table<'t> {
+    select: SelectStatement,
+    _t: CovariantOverLt<'t>,
 }
 
 pub struct ReifyRef<'t> {
@@ -147,10 +102,16 @@ struct Contains<'a, R> {
 }
 
 impl<'a, 't, R: Row<'t>> Value<'t> for Contains<'a, R> {
-    fn into_expr(self, t: &mut GhostToken<'t>) -> SimpleExpr {
-        let val = self.val.into_row(t);
+    fn into_expr(self) -> SimpleExpr {
+        let val = self.val.into_row();
         let tuple = Expr::tuple(val);
-        tuple.in_subquery(self.list.select.clone())
+        // tuple.in_subquery(
+        //     Query::select()
+        //         .expr(Expr::asterisk())
+        //         .from(self.list.name)
+        //         .take(),
+        // )
+        todo!()
     }
 }
 
@@ -203,13 +164,21 @@ impl<'t> QueryRef<'t> {
         other.row
     }
 
+    // // the query has a shorter, but unknown lifetime.
+    // pub fn inline_query<F>(&mut self, f: F) -> T
+    // where
+    //     F: for<'a> FnOnce(&'a mut QueryRef<'t>) -> DynRow<'t>,
+    // {
+    //     todo!()
+    // }
+
     // self is borrowed, because we need to mutate it to do group operations
     pub fn group_by<'a, G: Row<'t>>(&'a mut self, group: G) -> GroupRef<'a, 't, G> {
         GroupRef { query: self, group }
     }
 
     pub fn sort_by(&mut self, order: impl Row<'t>) {
-        for expr in order.into_row(&mut self.token) {
+        for expr in order.into_row() {
             self.select.order_by_expr(expr, Order::Asc);
         }
     }
@@ -261,27 +230,4 @@ where
     O: Row<'t>,
 {
     type Out = O;
-}
-
-impl<'t, T: Value<'t>> Row<'t> for T {
-    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr> {
-        vec![self.into_expr(t)]
-    }
-}
-
-impl<'t, A: Row<'t>, B: Row<'t>> Row<'t> for (A, B) {
-    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr> {
-        let mut res = self.0.into_row(t);
-        res.extend(self.1.into_row(t));
-        res
-    }
-}
-
-#[derive(Default, Clone, Copy)]
-pub struct Empty;
-
-impl<'t> Row<'t> for Empty {
-    fn into_row(&self, t: &mut GhostToken<'t>) -> Vec<SimpleExpr> {
-        vec![]
-    }
 }
