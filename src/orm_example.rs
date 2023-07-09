@@ -6,7 +6,7 @@ use sea_query::SimpleExpr;
 
 use crate::orm::{
     query,
-    row::Row,
+    row::{Table, TableRef},
     value::{MyIden, Value},
     QueryOk, QueryRef, ReifyResRef, SubQuery,
 };
@@ -19,7 +19,9 @@ struct Instance<'t> {
     seed: MyIden<'t>,
 }
 
-impl<'t> Row<'t> for Instance<'t> {
+impl<'t> Table<'t> for Instance<'t> {
+    const NAME: &'static str = "instance";
+
     fn into_row(&self) -> Vec<SimpleExpr> {
         vec![
             self.id.into_expr(),
@@ -29,19 +31,14 @@ impl<'t> Row<'t> for Instance<'t> {
         ]
     }
 
-    // fn from_row(row: Vec<MyIden<'t>>) -> Self {
-    //     let mut row = row.into_iter();
-    //     Self {
-    //         id: row.next().unwrap(),
-    //         timestamp: row.next().unwrap(),
-    //         problem: row.next().unwrap(),
-    //         seed: row.next().unwrap(),
-    //     }
-    // }
-}
-
-fn instances<'t>(q: &mut QueryRef<'t>) -> Instance<'t> {
-    todo!()
+    fn from_table(mut t: TableRef<'_, 't>) -> Self {
+        Self {
+            id: t.get("id"),
+            timestamp: t.get("timestamp"),
+            problem: t.get("problem"),
+            seed: t.get("seed"),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -50,18 +47,23 @@ struct Execution<'t> {
     instance: MyIden<'t>,
 }
 
-impl<'t> Row<'t> for Execution<'t> {
+impl<'t> Table<'t> for Execution<'t> {
+    const NAME: &'static str = "execution";
+
     fn into_row(&self) -> Vec<SimpleExpr> {
         todo!()
+    }
+
+    fn from_table(mut t: TableRef<'_, 't>) -> Self {
+        Self {
+            solution: t.get("solution"),
+            instance: t.get("instance"),
+        }
     }
 
     // fn from_row(row: Vec<MyIden<'t>>) -> Self {
     //     todo!()
     // }
-}
-
-fn executions<'t>(q: &mut QueryRef<'t>) -> Execution<'t> {
-    todo!()
 }
 
 #[derive(Clone, Copy)]
@@ -70,18 +72,23 @@ struct Solution<'t> {
     file_hash: MyIden<'t>,
 }
 
-impl<'t> Row<'t> for Solution<'t> {
+impl<'t> Table<'t> for Solution<'t> {
+    const NAME: &'static str = "solution";
+
     fn into_row(&self) -> Vec<SimpleExpr> {
         todo!()
+    }
+
+    fn from_table(mut t: TableRef<'_, 't>) -> Self {
+        Self {
+            id: t.get("id"),
+            file_hash: t.get("file_hash"),
+        }
     }
 
     // fn from_row(row: Vec<MyIden<'t>>) -> Self {
     //     todo!()
     // }
-}
-
-fn solutions<'t>(q: &mut QueryRef<'t>) -> Solution<'t> {
-    todo!()
 }
 
 #[derive(Clone, Copy)]
@@ -90,18 +97,23 @@ struct Problem<'t> {
     file_hash: MyIden<'t>,
 }
 
-impl<'t> Row<'t> for Problem<'t> {
+impl<'t> Table<'t> for Problem<'t> {
+    const NAME: &'static str = "problem";
+
     fn into_row(&self) -> Vec<SimpleExpr> {
         todo!()
+    }
+
+    fn from_table(mut t: TableRef<'_, 't>) -> Self {
+        Self {
+            id: t.get("id"),
+            file_hash: t.get("file_hash"),
+        }
     }
 
     // fn from_row(row: Vec<MyIden<'t>>) -> Self {
     //     todo!()
     // }
-}
-
-fn problems<'t>(q: &mut QueryRef<'t>) -> Problem<'t> {
-    todo!()
 }
 
 #[derive(Clone, Copy)]
@@ -111,9 +123,19 @@ struct Submission<'t> {
     timestamp: MyIden<'t>,
 }
 
-impl<'t> Row<'t> for Submission<'t> {
+impl<'t> Table<'t> for Submission<'t> {
+    const NAME: &'static str = "submission";
+
     fn into_row(&self) -> Vec<SimpleExpr> {
         todo!()
+    }
+
+    fn from_table(mut t: TableRef<'_, 't>) -> Self {
+        Self {
+            solution: t.get("solution"),
+            problem: t.get("problem"),
+            timestamp: t.get("timestamp"),
+        }
     }
 
     // fn from_row(row: Vec<MyIden<'t>>) -> Self {
@@ -121,24 +143,8 @@ impl<'t> Row<'t> for Submission<'t> {
     // }
 }
 
-fn submissions<'t>(q: &mut QueryRef<'t>) -> Submission<'t> {
-    // let alias = iden();
-    // SubQuery {
-    //     select: Query::select()
-    //         .from_as(Alias::new("submissions"), alias)
-    //         .expr(Expr::table_asterisk(alias))
-    //         .take(),
-    //     row: Submission {
-    //         solution: MyIden::from_expr(Expr::col((alias, Alias::new("solution")))),
-    //         problem: todo!(),
-    //         timestamp: todo!(),
-    //     },
-    // }
-    todo!()
-}
-
 fn bench_instances<'t>(q: &mut QueryRef<'t>) -> Instance<'t> {
-    let instance = q.join(instances);
+    let instance: Instance = q.join_table();
     let mut same_problem = q.group_by(instance.problem);
     let is_new = same_problem.rank_desc(instance.timestamp).lt(5);
     q.filter(is_new);
@@ -147,12 +153,12 @@ fn bench_instances<'t>(q: &mut QueryRef<'t>) -> Instance<'t> {
 }
 
 fn sol_prob<'t>(q: &mut QueryRef<'t>) -> (MyIden<'t>, MyIden<'t>) {
-    let submission = q.join(submissions);
+    let submission: Submission = q.join_table();
     (submission.solution, submission.problem)
 }
 
 fn sol_inst<'t>(q: &mut QueryRef<'t>) -> (MyIden<'t>, MyIden<'t>) {
-    let execution = q.join(executions);
+    let execution: Execution = q.join_table();
     (execution.solution, execution.instance)
 }
 
@@ -168,15 +174,15 @@ fn bench_queue() -> QueryOk {
 
         // the relevant tables for our query
         let instance = q.join(bench_instances);
-        let solution = q.join(solutions);
-        let problem = q.join(problems);
+        let solution: Solution = q.join_table();
+        let problem: Problem = q.join_table();
 
         q.filter(instance.problem.eq(problem.id));
         q.filter(submissions.contains((solution.id, problem.id)));
         q.filter(executions.contains((solution.id, instance.id)).not());
 
         q.reify(|mut r| QueuedExecution {
-            instance_seed: 0,
+            instance_seed: r.get(instance.seed),
             solution_hash: r.get(solution.file_hash),
             problem_hash: r.get(problem.file_hash),
         })

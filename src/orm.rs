@@ -15,7 +15,7 @@ use std::{
 use crate::orm::row::TableRef;
 
 use self::{
-    ast::{push_down, MyTable, Operation},
+    ast::{MyDef, MySelect, MyTable, Operation},
     row::Table,
     value::{MyIden, Value},
 };
@@ -67,7 +67,7 @@ impl<'a, 't, G: Value<'t>> GroupRef<'a, 't, G> {
 }
 
 pub struct SubQueryRes<R> {
-    select: Vec<Operation>,
+    ops: Vec<Operation>,
     row: R,
 }
 
@@ -117,9 +117,7 @@ where
 impl<'t, F: SubQueryFunc<'t> + Copy> Value<'t> for Contains<'t, F> {
     fn into_expr(self) -> SimpleExpr {
         let res = self.func.into_res();
-        let mut select = MyTable::Select(res.select).into_select();
-        push_down(&mut select);
-        select.expr(res.row.into_expr());
+        let select = MySelect(res.ops).into_select(Some(res.row.into_expr()));
         Expr::expr(self.val.into_expr()).in_subquery(select)
     }
 }
@@ -140,7 +138,7 @@ impl<'t> QueryRef<'t> {
     {
         let other_res = other.into_res();
         self.select
-            .push(Operation::From(MyTable::Select(other_res.select)));
+            .push(Operation::From(MyTable::Select(MySelect(other_res.ops))));
         other_res.row
     }
 
@@ -153,10 +151,10 @@ impl<'t> QueryRef<'t> {
                 alias.iden()
             },
         });
-        self.select.push(Operation::From(MyTable::Def {
+        self.select.push(Operation::From(MyTable::Def(MyDef {
             table: Alias::new(T::NAME),
             columns,
-        }));
+        })));
         res
     }
 
@@ -214,7 +212,7 @@ where
         };
         let row = (self)(&mut query);
         SubQueryRes {
-            select: query.select,
+            ops: query.select,
             row,
         }
     }
