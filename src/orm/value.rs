@@ -1,7 +1,7 @@
-use phtm::{CovariantOver, PhantomData};
+use phtm::CovariantOver;
 use sea_query::{Expr, SimpleExpr};
 
-use super::{row::Table, MyAlias};
+use super::MyAlias;
 
 pub trait Value<'t>: Copy {
     fn into_expr(self) -> SimpleExpr;
@@ -20,12 +20,6 @@ pub trait Value<'t>: Copy {
 
     fn not(self) -> MyNot<Self> {
         MyNot(self)
-    }
-}
-
-impl<'t, T: Table<'t>> Value<'t> for T {
-    fn into_expr(self) -> SimpleExpr {
-        Expr::tuple(self.into_row()).into()
     }
 }
 

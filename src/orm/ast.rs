@@ -97,6 +97,8 @@ impl MySelect {
                 push_down(&mut select)
             }
             select.expr(then);
+        } else {
+            select.expr(Expr::asterisk());
         }
         select
     }

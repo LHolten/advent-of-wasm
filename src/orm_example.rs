@@ -22,15 +22,6 @@ struct Instance<'t> {
 impl<'t> Table<'t> for Instance<'t> {
     const NAME: &'static str = "instance";
 
-    fn into_row(&self) -> Vec<SimpleExpr> {
-        vec![
-            self.id.into_expr(),
-            self.timestamp.into_expr(),
-            self.problem.into_expr(),
-            self.seed.into_expr(),
-        ]
-    }
-
     fn from_table(mut t: TableRef<'_, 't>) -> Self {
         Self {
             id: t.get("id"),
@@ -50,20 +41,12 @@ struct Execution<'t> {
 impl<'t> Table<'t> for Execution<'t> {
     const NAME: &'static str = "execution";
 
-    fn into_row(&self) -> Vec<SimpleExpr> {
-        todo!()
-    }
-
     fn from_table(mut t: TableRef<'_, 't>) -> Self {
         Self {
             solution: t.get("solution"),
             instance: t.get("instance"),
         }
     }
-
-    // fn from_row(row: Vec<MyIden<'t>>) -> Self {
-    //     todo!()
-    // }
 }
 
 #[derive(Clone, Copy)]
@@ -75,20 +58,12 @@ struct Solution<'t> {
 impl<'t> Table<'t> for Solution<'t> {
     const NAME: &'static str = "solution";
 
-    fn into_row(&self) -> Vec<SimpleExpr> {
-        todo!()
-    }
-
     fn from_table(mut t: TableRef<'_, 't>) -> Self {
         Self {
             id: t.get("id"),
             file_hash: t.get("file_hash"),
         }
     }
-
-    // fn from_row(row: Vec<MyIden<'t>>) -> Self {
-    //     todo!()
-    // }
 }
 
 #[derive(Clone, Copy)]
@@ -100,20 +75,12 @@ struct Problem<'t> {
 impl<'t> Table<'t> for Problem<'t> {
     const NAME: &'static str = "problem";
 
-    fn into_row(&self) -> Vec<SimpleExpr> {
-        todo!()
-    }
-
     fn from_table(mut t: TableRef<'_, 't>) -> Self {
         Self {
             id: t.get("id"),
             file_hash: t.get("file_hash"),
         }
     }
-
-    // fn from_row(row: Vec<MyIden<'t>>) -> Self {
-    //     todo!()
-    // }
 }
 
 #[derive(Clone, Copy)]
@@ -126,10 +93,6 @@ struct Submission<'t> {
 impl<'t> Table<'t> for Submission<'t> {
     const NAME: &'static str = "submission";
 
-    fn into_row(&self) -> Vec<SimpleExpr> {
-        todo!()
-    }
-
     fn from_table(mut t: TableRef<'_, 't>) -> Self {
         Self {
             solution: t.get("solution"),
@@ -137,10 +100,6 @@ impl<'t> Table<'t> for Submission<'t> {
             timestamp: t.get("timestamp"),
         }
     }
-
-    // fn from_row(row: Vec<MyIden<'t>>) -> Self {
-    //     todo!()
-    // }
 }
 
 fn bench_instances<'t>(q: &mut QueryRef<'t>) -> Instance<'t> {

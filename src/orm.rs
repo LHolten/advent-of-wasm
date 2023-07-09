@@ -4,19 +4,16 @@ pub mod value;
 
 use phtm::InvariantOverLt;
 use sea_query::{
-    Alias, Expr, Iden, Order, OrderedStatement, OverStatement, SelectStatement, SimpleExpr,
-    SqliteQueryBuilder, WindowStatement,
+    Expr, Iden, Order, OrderedStatement, OverStatement, SelectStatement, SimpleExpr,
+    WindowStatement,
 };
 use std::{
     marker::PhantomData,
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use crate::orm::row::TableRef;
-
 use self::{
-    ast::{MyDef, MySelect, MyTable, Operation},
-    row::Table,
+    ast::{MySelect, MyTable, Operation},
     value::{MyIden, Value},
 };
 
@@ -74,10 +71,11 @@ pub struct SubQueryRes<R> {
     row: R,
 }
 
-impl<'t, R: Value<'t>> SubQueryRes<R> {
+#[cfg(test)]
+impl<R> SubQueryRes<R> {
     pub fn print(self) {
-        let select = MySelect(self.ops).into_select(Some(self.row.into_expr()));
-        let res = select.build(SqliteQueryBuilder);
+        let select = MySelect(self.ops).into_select(None);
+        let res = select.build(sea_query::SqliteQueryBuilder);
         println!("{}", res.0);
     }
 }
@@ -98,6 +96,7 @@ impl<F> SubQuery<F> {
     pub fn contains<'t>(self, val: F::Out) -> impl Value<'t>
     where
         F: SubQueryFunc<'t> + Copy,
+        F::Out: Value<'t>,
     {
         Contains { func: self.0, val }
     }
@@ -125,7 +124,10 @@ where
     val: F::Out,
 }
 
-impl<'t, F: SubQueryFunc<'t> + Copy> Value<'t> for Contains<'t, F> {
+impl<'t, F: SubQueryFunc<'t> + Copy> Value<'t> for Contains<'t, F>
+where
+    F::Out: Value<'t>,
+{
     fn into_expr(self) -> SimpleExpr {
         let res = self.func.into_res();
         let select = MySelect(res.ops).into_select(Some(res.row.into_expr()));
@@ -151,22 +153,6 @@ impl<'t> QueryRef<'t> {
         self.select
             .push(Operation::From(MyTable::Select(MySelect(other_res.ops))));
         other_res.row
-    }
-
-    pub fn join_table<T: Table<'t>>(&mut self) -> T {
-        let mut columns = Vec::new();
-        let res = T::from_table(TableRef {
-            callback: &mut |name| {
-                let alias = MyAlias::new();
-                columns.push((Alias::new(name), alias));
-                alias.iden()
-            },
-        });
-        self.select.push(Operation::From(MyTable::Def(MyDef {
-            table: Alias::new(T::NAME),
-            columns,
-        })));
-        res
     }
 
     // self is borrowed, because we need to mutate it to do group operations
@@ -214,7 +200,7 @@ pub trait SubQueryFunc<'t>: Sized
 where
     Self: FnOnce(&mut QueryRef<'t>) -> Self::Out,
 {
-    type Out: Value<'t>;
+    type Out: Copy + 't;
 
     fn into_res(self) -> SubQueryRes<Self::Out> {
         let mut query = QueryRef {
@@ -232,7 +218,7 @@ where
 impl<'t, O, F> SubQueryFunc<'t> for F
 where
     F: FnOnce(&mut QueryRef<'t>) -> O,
-    O: Value<'t>,
+    O: Copy + 't,
 {
     type Out = O;
 }
