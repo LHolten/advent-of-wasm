@@ -210,3 +210,15 @@ struct QueuedExecution {
 
 //     // q.filter(val.unwrap().problem);
 // }
+
+#[cfg(test)]
+mod tests {
+    use crate::orm::SubQueryFunc;
+
+    use super::{bench_instances, sol_prob};
+
+    #[test]
+    fn print_sql() {
+        (bench_instances).into_res().print()
+    }
+}

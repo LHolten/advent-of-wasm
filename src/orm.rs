@@ -5,7 +5,7 @@ pub mod value;
 use phtm::InvariantOverLt;
 use sea_query::{
     Alias, Expr, Iden, Order, OrderedStatement, OverStatement, SelectStatement, SimpleExpr,
-    WindowStatement,
+    SqliteQueryBuilder, WindowStatement,
 };
 use std::{
     marker::PhantomData,
@@ -30,7 +30,10 @@ impl MyAlias {
     }
 
     pub fn iden<'t>(self) -> MyIden<'t> {
-        todo!()
+        MyIden {
+            name: self,
+            _t: PhantomData,
+        }
     }
 }
 
@@ -69,6 +72,14 @@ impl<'a, 't, G: Value<'t>> GroupRef<'a, 't, G> {
 pub struct SubQueryRes<R> {
     ops: Vec<Operation>,
     row: R,
+}
+
+impl<'t, R: Value<'t>> SubQueryRes<R> {
+    pub fn print(self) {
+        let select = MySelect(self.ops).into_select(Some(self.row.into_expr()));
+        let res = select.build(SqliteQueryBuilder);
+        println!("{}", res.0);
+    }
 }
 
 /// invariant is that `F` doesn't depend on anything else and nothing depends on it
@@ -145,7 +156,7 @@ impl<'t> QueryRef<'t> {
     pub fn join_table<T: Table<'t>>(&mut self) -> T {
         let mut columns = Vec::new();
         let res = T::from_table(TableRef {
-            callback: &|name| {
+            callback: &mut |name| {
                 let alias = MyAlias::new();
                 columns.push((Alias::new(name), alias));
                 alias.iden()

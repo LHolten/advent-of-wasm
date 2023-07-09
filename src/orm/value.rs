@@ -10,8 +10,8 @@ pub trait Value<'t>: Copy {
         MyAdd(self, rhs)
     }
 
-    fn lt(self, arg: i32) -> Self {
-        todo!()
+    fn lt(self, rhs: i32) -> MyLt<Self> {
+        MyLt(self, rhs)
     }
 
     fn eq(self, other: Self) -> Self {
@@ -37,8 +37,8 @@ impl<'t, A: Value<'t>, B: Value<'t>> Value<'t> for (A, B) {
 
 #[derive(Clone, Copy)]
 pub struct MyIden<'t> {
-    name: MyAlias,
-    _t: CovariantOver<&'t ()>,
+    pub(super) name: MyAlias,
+    pub(super) _t: CovariantOver<&'t ()>,
 }
 
 impl<'t> Value<'t> for MyIden<'t> {
@@ -62,5 +62,14 @@ pub struct MyNot<T>(T);
 impl<'t, T: Value<'t>> Value<'t> for MyNot<T> {
     fn into_expr(self) -> SimpleExpr {
         self.0.into_expr().not()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct MyLt<A>(A, i32);
+
+impl<'t, A: Value<'t>> Value<'t> for MyLt<A> {
+    fn into_expr(self) -> SimpleExpr {
+        Expr::expr(self.0.into_expr()).lt(self.1)
     }
 }

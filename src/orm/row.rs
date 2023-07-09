@@ -1,15 +1,14 @@
-use phtm::{CovariantOver, PhantomData};
 use sea_query::SimpleExpr;
 
 use super::value::MyIden;
 
 pub struct TableRef<'a, 't> {
-    pub(super) callback: &'a dyn FnMut(&'static str) -> MyIden<'t>,
+    pub(super) callback: &'a mut dyn FnMut(&'static str) -> MyIden<'t>,
 }
 
 impl<'a, 't> TableRef<'a, 't> {
-    pub fn get(&self, name: &'static str) -> MyIden<'t> {
-        todo!()
+    pub fn get(&mut self, name: &'static str) -> MyIden<'t> {
+        (self.callback)(name)
     }
 }
 
