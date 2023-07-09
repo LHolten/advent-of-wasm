@@ -6,7 +6,7 @@ use sea_query::SimpleExpr;
 
 use crate::orm::{
     query,
-    row::{Table, TableRef},
+    table::{Table, TableRef},
     value::{MyIden, Value},
     QueryOk, QueryRef, ReifyResRef, SubQuery,
 };

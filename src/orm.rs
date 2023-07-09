@@ -1,5 +1,5 @@
 mod ast;
-pub mod row;
+pub mod table;
 pub mod value;
 
 use phtm::InvariantOverLt;

@@ -1,10 +1,8 @@
-use std::ops::Deref;
-
-use sea_query::{Alias, Expr, SimpleExpr};
+use sea_query::Alias;
 
 use super::{
     ast::{MyDef, MyTable, Operation},
-    value::{MyIden, Value},
+    value::MyIden,
     MyAlias, QueryRef,
 };
 
