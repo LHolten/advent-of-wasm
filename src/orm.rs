@@ -3,8 +3,8 @@ pub mod value;
 
 use phtm::InvariantOverLt;
 use sea_query::{
-    Alias, Expr, Func, Iden, Order, OrderedStatement, Query, SelectStatement, SimpleExpr,
-    WindowStatement,
+    Alias, Cond, Expr, Func, Iden, JoinType, Order, OrderedStatement, OverStatement, Query,
+    SelectStatement, SimpleExpr, WindowStatement,
 };
 use std::{
     marker::PhantomData,
@@ -12,13 +12,9 @@ use std::{
 };
 
 use self::{
-    row::{Empty, Row},
+    row::Row,
     value::{MyIden, Value},
 };
-
-pub fn iden<'t>() -> MyIden<'t> {
-    todo!()
-}
 
 #[derive(Clone, Copy)]
 struct MyAlias(u64);
@@ -46,23 +42,28 @@ pub struct GroupRef<'a, 't, G> {
 }
 
 impl<'a, 't, G: Row<'t>> GroupRef<'a, 't, G> {
-    fn rank_internal(&mut self, val: impl Row<'t>, order: Order) -> MyIden<'t> {
+    fn rank_internal(&mut self, val: impl Row<'t>, order: Order) -> impl Value<'t> {
         let mut window = WindowStatement::new();
+        for expr in self.group.into_row() {
+            window.add_partition_by(expr);
+        }
         for expr in val.into_row() {
             window.order_by_expr(expr, order.clone());
         }
-        let alias = MyAlias::new();
-        self.query
-            .select
-            .expr_window_as(Func::cust(Alias::new("ROW_NUMBER")), window, alias);
-        alias.iden()
+        let (alias1, alias2) = (MyAlias::new(), MyAlias::new());
+        self.query.select = Query::select()
+            .from_subquery(self.query.select.take(), alias1)
+            .expr(Expr::table_asterisk(alias1))
+            .expr_window_as(Func::cust(Alias::new("ROW_NUMBER")), window, alias2)
+            .take();
+        alias2.iden()
     }
 
-    pub fn rank_asc(&mut self, val: impl Row<'t>) -> MyIden<'t> {
+    pub fn rank_asc(&mut self, val: impl Row<'t>) -> impl Value<'t> {
         self.rank_internal(val, Order::Asc)
     }
 
-    pub fn rank_desc(&mut self, val: impl Row<'t>) -> MyIden<'t> {
+    pub fn rank_desc(&mut self, val: impl Row<'t>) -> impl Value<'t> {
         self.rank_internal(val, Order::Desc)
     }
 }
@@ -122,55 +123,40 @@ where
 
 impl<'t, F: SubQueryFunc<'t> + Copy> Value<'t> for Contains<'t, F> {
     fn into_expr(self) -> SimpleExpr {
-        let val = self.val.into_row();
-        let tuple = Expr::tuple(val);
-        // tuple.in_subquery(
-        //     Query::select()
-        //         .expr(Expr::asterisk())
-        //         .from(self.list.name)
-        //         .take(),
-        // )
-        todo!()
+        let res = self.func.into_res();
+        let alias = MyAlias::new();
+        let select = Query::select()
+            .from_subquery(res.select, alias)
+            .expr(Expr::tuple(res.row.into_row()))
+            .take();
+        Expr::tuple(self.val.into_row()).in_subquery(select)
     }
 }
 
 impl<'t> QueryRef<'t> {
     pub fn filter(&mut self, cond: impl Value<'t>) {
-        let alias = iden();
-        // *self.select = Query::select()
-        //     .from_subquery(self.select.take(), alias.clone())
-        //     .and_where(cond.into_expr(&mut self.token))
-        //     .expr(Expr::table_asterisk(alias))
-        //     .take();
-        todo!()
+        let alias = MyAlias::new();
+        self.select = Query::select()
+            .from_subquery(self.select.take(), alias)
+            .expr(Expr::table_asterisk(alias))
+            .and_where(cond.into_expr())
+            .take();
     }
 
-    pub fn join<F>(&mut self, mut other: F) -> <F as SubQueryFunc<'t>>::Out
+    pub fn join<F>(&mut self, other: F) -> <F as SubQueryFunc<'t>>::Out
     where
         F: for<'a> SubQueryFunc<'a>,
     {
-        let (alias1, alias2) = (iden(), iden());
-        // *self.select = Query::select()
-        //     .from_subquery(self.select.take(), alias1.clone())
-        //     .join_subquery(
-        //         JoinType::InnerJoin,
-        //         other.select.take(),
-        //         alias2.clone(),
-        //         Cond::all(),
-        //     )
-        //     .expr(Expr::table_asterisk(alias1))
-        //     .expr(Expr::table_asterisk(alias2))
-        //     .take();
-        other.into_res().row
+        let mut other_res = other.into_res();
+        let (alias1, alias2) = (MyAlias::new(), MyAlias::new());
+        self.select = Query::select()
+            .from_subquery(self.select.take(), alias1)
+            .from_subquery(other_res.select.take(), alias2)
+            .expr(Expr::table_asterisk(alias1))
+            .expr(Expr::table_asterisk(alias2))
+            .take();
+        other_res.row
     }
-
-    // // the query has a shorter, but unknown lifetime.
-    // pub fn inline_query<F>(&mut self, f: F) -> T
-    // where
-    //     F: for<'a> FnOnce(&'a mut QueryRef<'t>) -> DynRow<'t>,
-    // {
-    //     todo!()
-    // }
 
     // self is borrowed, because we need to mutate it to do group operations
     pub fn group_by<'a, G: Row<'t>>(&'a mut self, group: G) -> GroupRef<'a, 't, G> {
@@ -181,10 +167,6 @@ impl<'t> QueryRef<'t> {
         for expr in order.into_row() {
             self.select.order_by_expr(expr, Order::Asc);
         }
-    }
-
-    pub fn test(&mut self) -> MyIden<'t> {
-        todo!()
     }
 
     pub fn reify<T, F>(self, f: F) -> ReifyResRef<'t>
@@ -201,11 +183,19 @@ impl<'t> ReifyRef<'t> {
     }
 }
 
-pub fn query<F>(f: F) -> QueryOk
+pub fn query<F>(func: F) -> QueryOk
 where
     F: for<'t> FnOnce(QueryRef<'t>) -> ReifyResRef<'t>,
 {
-    let query = SubQuery::<Empty>::default();
+    let query = QueryRef {
+        select: Query::select(),
+        _t: PhantomData,
+    };
+    let res = (func)(query);
+    QueryOk {
+        select: todo!(),
+        reify: todo!(),
+    };
     todo!()
     // query.ma
 }
