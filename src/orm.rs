@@ -82,30 +82,26 @@ impl<R> SubQueryRes<R> {
     }
 }
 
-/// invariant is that `F` doesn't depend on anything else and nothing depends on it
-/// this is checked by [SubQuery::new]
-#[derive(Default, Clone, Copy)]
-pub struct SubQuery<F>(F);
-
-impl<F> SubQuery<F> {
-    pub const fn new(func: F) -> Self
+pub trait ContainsExt: for<'a> SubQueryFunc<'a> + Copy {
+    fn contains<'t>(self, val: <Self as SubQueryFunc<'t>>::Out) -> Contains<'t, Self>
     where
-        F: for<'a> SubQueryFunc<'a> + Copy,
-    {
-        SubQuery(func)
-    }
+        <Self as SubQueryFunc<'t>>::Out: Value<'t>;
+}
 
-    pub fn contains<'t>(self, val: F::Out) -> impl Value<'t>
+impl<F> ContainsExt for F
+where
+    F: for<'a> SubQueryFunc<'a> + Copy,
+{
+    fn contains<'t>(self, val: <Self as SubQueryFunc<'t>>::Out) -> Contains<'t, Self>
     where
-        F: SubQueryFunc<'t> + Copy,
-        F::Out: Value<'t>,
+        <Self as SubQueryFunc<'t>>::Out: Value<'t>,
     {
-        Contains { func: self.0, val }
+        Contains { func: self, val }
     }
 }
 
 #[derive(Clone, Copy)]
-struct Contains<'t, F>
+pub struct Contains<'t, F>
 where
     F: SubQueryFunc<'t>,
 {

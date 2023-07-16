@@ -8,7 +8,7 @@ use crate::orm::{
     query,
     table::{Table, TableRef},
     value::{MyIden, Value},
-    QueryRef, ReifyRef, SubQuery,
+    ContainsExt, QueryRef, ReifyRef,
 };
 
 #[derive(Clone, Copy)]
@@ -111,31 +111,27 @@ fn bench_instances<'t>(q: &mut QueryRef<'t>) -> Instance<'t> {
     instance
 }
 
+// list of which solutions are submitted to which problems
 fn sol_prob<'t>(q: &mut QueryRef<'t>) -> (MyIden<'t>, MyIden<'t>) {
     let submission: Submission = q.join_table();
     (submission.solution, submission.problem)
 }
 
+// list of which solutions are executed on which instances
 fn sol_inst<'t>(q: &mut QueryRef<'t>) -> (MyIden<'t>, MyIden<'t>) {
     let execution: Execution = q.join_table();
     (execution.solution, execution.instance)
 }
 
 fn bench_inner<'t>(q: &mut QueryRef<'t>) -> impl Fn(ReifyRef<'_, 't>) -> QueuedExecution {
-    // list of which solutions are submitted to which problems
-    let submissions = SubQuery::new(sol_prob);
-
-    // list of which solutions are executed on which instances
-    let executions = SubQuery::new(sol_inst);
-
     // the relevant tables for our query
     let instance = q.join(bench_instances);
     let solution: Solution = q.join_table();
     let problem: Problem = q.join_table();
 
     q.filter(instance.problem.eq(problem.id));
-    q.filter(submissions.contains((solution.id, problem.id)));
-    q.filter(executions.contains((solution.id, instance.id)).not());
+    q.filter(sol_prob.contains((solution.id, problem.id)));
+    q.filter(sol_inst.contains((solution.id, instance.id)).not());
 
     move |mut r: ReifyRef| QueuedExecution {
         instance_seed: r.get(instance.seed),
@@ -157,17 +153,22 @@ struct QueuedExecution {
 }
 
 // pub fn boom<'t>(q: &mut QueryRef<'t>) {
-//     // list of which solutions are submitted to which problems
-//     let submissions = SubQuery::new(sol_prob);
+//     let solution: Solution = q.join_table();
 
-//     let thing: Instance<'_> = q.flat_map(SubQuery::new(bench_instances));
+//     let f = |g: &mut QueryRef<'t>| solution.id;
 
-//     let mut val: Option<Instance<'_>> = None;
-//     let my_query = SubQuery::new(|q: &mut QueryRef<'t>| {
-//         // q.filter(thing.problem);
-//         val = Some(q.flat_map(SubQuery::new(bench_instances)));
-//         todo!()
-//     });
+//     f.contains(solution.id);
+
+//     todo!()
+
+//     // let thing: Instance<'_> = q.flat_map(SubQuery::new(bench_instances));
+
+//     // let mut val: Option<Instance<'_>> = None;
+//     // let my_query = SubQuery::new(|q: &mut QueryRef<'t>| {
+//     //     // q.filter(thing.problem);
+//     //     val = Some(q.flat_map(SubQuery::new(bench_instances)));
+//     //     todo!()
+//     // });
 
 //     // q.filter(val.unwrap().problem);
 // }
