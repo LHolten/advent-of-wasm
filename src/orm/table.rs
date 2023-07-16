@@ -33,7 +33,7 @@ impl<'t> QueryRef<'t> {
                 alias.iden()
             },
         });
-        self.select.push(Operation::From(MyTable::Def(MyDef {
+        self.ops.push(Operation::From(MyTable::Def(MyDef {
             table: Alias::new(T::NAME),
             columns,
         })));

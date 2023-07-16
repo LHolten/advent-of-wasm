@@ -8,7 +8,7 @@ use crate::orm::{
     query,
     table::{Table, TableRef},
     value::{MyIden, Value},
-    QueryOk, QueryRef, ReifyResRef, SubQuery,
+    QueryRef, ReifyRef, SubQuery,
 };
 
 #[derive(Clone, Copy)]
@@ -121,31 +121,33 @@ fn sol_inst<'t>(q: &mut QueryRef<'t>) -> (MyIden<'t>, MyIden<'t>) {
     (execution.solution, execution.instance)
 }
 
+fn bench_inner<'t>(q: &mut QueryRef<'t>) -> impl Fn(ReifyRef<'_, 't>) -> QueuedExecution {
+    // list of which solutions are submitted to which problems
+    let submissions = SubQuery::new(sol_prob);
+
+    // list of which solutions are executed on which instances
+    let executions = SubQuery::new(sol_inst);
+
+    // the relevant tables for our query
+    let instance = q.join(bench_instances);
+    let solution: Solution = q.join_table();
+    let problem: Problem = q.join_table();
+
+    q.filter(instance.problem.eq(problem.id));
+    q.filter(submissions.contains((solution.id, problem.id)));
+    q.filter(executions.contains((solution.id, instance.id)).not());
+
+    move |mut r: ReifyRef| QueuedExecution {
+        instance_seed: r.get(instance.seed),
+        solution_hash: r.get(solution.file_hash),
+        problem_hash: r.get(problem.file_hash),
+    }
+}
+
 // last five problem-instances for each problem
 // which have not been executed
-fn bench_queue() -> QueryOk {
-    query(for<'a> |mut q: QueryRef<'a>| -> ReifyResRef<'a> {
-        // list of which solutions are submitted to which problems
-        let submissions = SubQuery::new(sol_prob);
-
-        // list of which solutions are executed on which instances
-        let executions = SubQuery::new(sol_inst);
-
-        // the relevant tables for our query
-        let instance = q.join(bench_instances);
-        let solution: Solution = q.join_table();
-        let problem: Problem = q.join_table();
-
-        q.filter(instance.problem.eq(problem.id));
-        q.filter(submissions.contains((solution.id, problem.id)));
-        q.filter(executions.contains((solution.id, instance.id)).not());
-
-        q.reify(|mut r| QueuedExecution {
-            instance_seed: r.get(instance.seed),
-            solution_hash: r.get(solution.file_hash),
-            problem_hash: r.get(problem.file_hash),
-        })
-    })
+fn bench_queue() -> Vec<QueuedExecution> {
+    query(bench_inner)
 }
 
 struct QueuedExecution {

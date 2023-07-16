@@ -14,8 +14,8 @@ pub trait Value<'t>: Copy {
         MyLt(self, rhs)
     }
 
-    fn eq(self, other: Self) -> Self {
-        todo!()
+    fn eq<T: Value<'t>>(self, rhs: T) -> MyEq<Self, T> {
+        MyEq(self, rhs)
     }
 
     fn not(self) -> MyNot<Self> {
@@ -65,5 +65,14 @@ pub struct MyLt<A>(A, i32);
 impl<'t, A: Value<'t>> Value<'t> for MyLt<A> {
     fn into_expr(self) -> SimpleExpr {
         Expr::expr(self.0.into_expr()).lt(self.1)
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct MyEq<A, B>(A, B);
+
+impl<'t, A: Value<'t>, B: Value<'t>> Value<'t> for MyEq<A, B> {
+    fn into_expr(self) -> SimpleExpr {
+        self.0.into_expr().eq(self.1.into_expr())
     }
 }

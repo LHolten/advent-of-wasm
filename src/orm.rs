@@ -3,10 +3,12 @@ pub mod table;
 pub mod value;
 
 use phtm::InvariantOverLt;
+use rusqlite::{types::FromSql, Connection, Row};
 use sea_query::{
-    Expr, Iden, Order, OrderedStatement, OverStatement, SelectStatement, SimpleExpr,
+    Expr, Iden, Order, OrderedStatement, OverStatement, SimpleExpr, SqliteQueryBuilder,
     WindowStatement,
 };
+use sea_query_rusqlite::RusqliteBinder;
 use std::{
     marker::PhantomData,
     sync::atomic::{AtomicU64, Ordering},
@@ -52,7 +54,7 @@ impl<'a, 't, G: Value<'t>> GroupRef<'a, 't, G> {
         window.order_by_expr(val.into_expr(), order);
         let alias = MyAlias::new();
         self.query
-            .select
+            .ops
             .push(Operation::Window(val.into_expr(), window, alias));
         alias.iden()
     }
@@ -102,19 +104,6 @@ impl<F> SubQuery<F> {
     }
 }
 
-pub struct ReifyRef<'t> {
-    _t: InvariantOverLt<'t>,
-}
-
-pub struct ReifyResRef<'t> {
-    _t: InvariantOverLt<'t>,
-}
-
-pub struct QueryOk {
-    select: SelectStatement,
-    reify: ReifyResRef<'static>,
-}
-
 #[derive(Clone, Copy)]
 struct Contains<'t, F>
 where
@@ -136,13 +125,13 @@ where
 }
 
 pub struct QueryRef<'t> {
-    select: Vec<Operation>,
+    ops: Vec<Operation>,
     _t: InvariantOverLt<'t>,
 }
 
 impl<'t> QueryRef<'t> {
     pub fn filter(&mut self, cond: impl Value<'t>) {
-        self.select.push(Operation::Filter(cond.into_expr()));
+        self.ops.push(Operation::Filter(cond.into_expr()));
     }
 
     pub fn join<F>(&mut self, other: F) -> <F as SubQueryFunc<'t>>::Out
@@ -150,7 +139,7 @@ impl<'t> QueryRef<'t> {
         F: for<'a> SubQueryFunc<'a>,
     {
         let other_res = other.into_res();
-        self.select
+        self.ops
             .push(Operation::From(MyTable::Select(MySelect(other_res.ops))));
         other_res.row
     }
@@ -161,39 +150,9 @@ impl<'t> QueryRef<'t> {
     }
 
     pub fn sort_by(&mut self, order: impl Value<'t>) {
-        self.select
+        self.ops
             .push(Operation::Order(order.into_expr(), Order::Asc));
     }
-
-    pub fn reify<T, F>(self, f: F) -> ReifyResRef<'t>
-    where
-        F: FnMut(ReifyRef<'t>) -> T,
-    {
-        todo!()
-    }
-}
-
-impl<'t> ReifyRef<'t> {
-    pub fn get<V>(&mut self, v: impl Value<'t>) -> V {
-        todo!()
-    }
-}
-
-pub fn query<F>(func: F) -> QueryOk
-where
-    F: for<'t> FnOnce(QueryRef<'t>) -> ReifyResRef<'t>,
-{
-    let query = QueryRef {
-        select: Vec::new(),
-        _t: PhantomData,
-    };
-    let res = (func)(query);
-    QueryOk {
-        select: todo!(),
-        reify: todo!(),
-    };
-    todo!()
-    // query.ma
 }
 
 pub trait SubQueryFunc<'t>: Sized
@@ -204,12 +163,12 @@ where
 
     fn into_res(self) -> SubQueryRes<Self::Out> {
         let mut query = QueryRef {
-            select: Vec::new(),
+            ops: Vec::new(),
             _t: PhantomData,
         };
         let row = (self)(&mut query);
         SubQueryRes {
-            ops: query.select,
+            ops: query.ops,
             row,
         }
     }
@@ -221,4 +180,61 @@ where
     O: Copy + 't,
 {
     type Out = O;
+}
+
+pub trait QueyFunc<'t>
+where
+    Self: FnOnce(&mut QueryRef<'t>) -> Self::Out,
+{
+    type Out: Fn(ReifyRef<'_, 't>) -> Self::Final;
+    type Final;
+}
+
+impl<'t, F, O, T> QueyFunc<'t> for F
+where
+    Self: FnOnce(&mut QueryRef<'t>) -> O,
+    O: Fn(ReifyRef<'_, 't>) -> T,
+{
+    type Out = O;
+    type Final = T;
+}
+
+pub struct ReifyRef<'a, 't> {
+    row: &'a Row<'a>,
+    _t: InvariantOverLt<'t>,
+}
+
+impl<'a, 't> ReifyRef<'a, 't> {
+    pub fn get<V: FromSql>(&mut self, v: MyIden<'t>) -> V {
+        let mut name = String::new();
+        v.name.unquoted(&mut name);
+        self.row.get_unwrap(&*name)
+    }
+}
+
+pub fn query<F, T>(func: F) -> Vec<T>
+where
+    F: for<'t> QueyFunc<'t, Final = T>,
+{
+    let mut query = QueryRef {
+        ops: Vec::new(),
+        _t: PhantomData,
+    };
+    let res = (func)(&mut query);
+
+    let select = MySelect(query.ops).into_select(None);
+    let (query, params) = select.build_rusqlite(SqliteQueryBuilder);
+
+    let conn = Connection::open("test.db").unwrap();
+    let mut stmt = conn.prepare(&query).unwrap();
+    stmt.query_map(&*params.as_params(), |row| {
+        let reify = ReifyRef {
+            _t: PhantomData,
+            row,
+        };
+        Ok((res)(reify))
+    })
+    .unwrap()
+    .collect::<Result<_, _>>()
+    .unwrap()
 }

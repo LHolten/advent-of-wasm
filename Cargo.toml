@@ -17,10 +17,12 @@ fehler = "1.0.0"
 ghost-cell = "0.2.3"
 k12 = "0.2.1"
 maud = "0.24.0"
-phtm = "1.0.3"
+phtm = "2.0.1"
 # oauth2 = "4.3.0"
 rand = "0.8.5"
+rusqlite = "0.28.0"
 sea-query = "0.28.5"
+sea-query-rusqlite = "0.2.1"
 serde = { version = "1.0.151", features = ["serde_derive"] }
 tokio = { version = "1.23.0", features = ["full"] }
 toml = "0.5.10"
