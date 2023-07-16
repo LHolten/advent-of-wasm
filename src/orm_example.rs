@@ -19,11 +19,13 @@ struct Instance<'t> {
     seed: MyIden<'t>,
 }
 
-impl<'t> Table<'t> for Instance<'t> {
+impl Table for Instance<'_> {
     const NAME: &'static str = "instance";
 
-    fn from_table(mut t: TableRef<'_, 't>) -> Self {
-        Self {
+    type Out<'t> = Instance<'t>;
+
+    fn from_table<'t>(mut t: TableRef<'_, 't>) -> Self::Out<'t> {
+        Self::Out {
             id: t.get("id"),
             timestamp: t.get("timestamp"),
             problem: t.get("problem"),
@@ -38,11 +40,13 @@ struct Execution<'t> {
     instance: MyIden<'t>,
 }
 
-impl<'t> Table<'t> for Execution<'t> {
+impl Table for Execution<'_> {
     const NAME: &'static str = "execution";
 
-    fn from_table(mut t: TableRef<'_, 't>) -> Self {
-        Self {
+    type Out<'t> = Execution<'t>;
+
+    fn from_table<'t>(mut t: TableRef<'_, 't>) -> Self::Out<'t> {
+        Self::Out {
             solution: t.get("solution"),
             instance: t.get("instance"),
         }
@@ -55,11 +59,13 @@ struct Solution<'t> {
     file_hash: MyIden<'t>,
 }
 
-impl<'t> Table<'t> for Solution<'t> {
+impl Table for Solution<'_> {
     const NAME: &'static str = "solution";
 
-    fn from_table(mut t: TableRef<'_, 't>) -> Self {
-        Self {
+    type Out<'t> = Solution<'t>;
+
+    fn from_table<'t>(mut t: TableRef<'_, 't>) -> Self::Out<'t> {
+        Self::Out {
             id: t.get("id"),
             file_hash: t.get("file_hash"),
         }
@@ -72,11 +78,13 @@ struct Problem<'t> {
     file_hash: MyIden<'t>,
 }
 
-impl<'t> Table<'t> for Problem<'t> {
+impl Table for Problem<'_> {
     const NAME: &'static str = "problem";
 
-    fn from_table(mut t: TableRef<'_, 't>) -> Self {
-        Self {
+    type Out<'t> = Problem<'t>;
+
+    fn from_table<'t>(mut t: TableRef<'_, 't>) -> Self::Out<'t> {
+        Self::Out {
             id: t.get("id"),
             file_hash: t.get("file_hash"),
         }
@@ -90,11 +98,13 @@ struct Submission<'t> {
     timestamp: MyIden<'t>,
 }
 
-impl<'t> Table<'t> for Submission<'t> {
+impl Table for Submission<'_> {
     const NAME: &'static str = "submission";
 
-    fn from_table(mut t: TableRef<'_, 't>) -> Self {
-        Self {
+    type Out<'t> = Submission<'t>;
+
+    fn from_table<'t>(mut t: TableRef<'_, 't>) -> Self::Out<'t> {
+        Self::Out {
             solution: t.get("solution"),
             problem: t.get("problem"),
             timestamp: t.get("timestamp"),
@@ -103,7 +113,7 @@ impl<'t> Table<'t> for Submission<'t> {
 }
 
 fn bench_instances<'t>(q: &mut QueryRef<'t>) -> Instance<'t> {
-    let instance: Instance = q.join_table();
+    let instance = Instance::join(q);
     let mut same_problem = q.group_by(instance.problem);
     let is_new = same_problem.rank_desc(instance.timestamp).lt(5);
     q.filter(is_new);
@@ -113,21 +123,21 @@ fn bench_instances<'t>(q: &mut QueryRef<'t>) -> Instance<'t> {
 
 // list of which solutions are submitted to which problems
 fn sol_prob<'t>(q: &mut QueryRef<'t>) -> (MyIden<'t>, MyIden<'t>) {
-    let submission: Submission = q.join_table();
+    let submission = Submission::join(q);
     (submission.solution, submission.problem)
 }
 
 // list of which solutions are executed on which instances
 fn sol_inst<'t>(q: &mut QueryRef<'t>) -> (MyIden<'t>, MyIden<'t>) {
-    let execution: Execution = q.join_table();
+    let execution = Execution::join(q);
     (execution.solution, execution.instance)
 }
 
 fn bench_inner<'t>(q: &mut QueryRef<'t>) -> impl Fn(ReifyRef<'_, 't>) -> QueuedExecution {
     // the relevant tables for our query
     let instance = q.join(bench_instances);
-    let solution: Solution = q.join_table();
-    let problem: Problem = q.join_table();
+    let solution = Solution::join(q);
+    let problem = Problem::join(q);
 
     q.filter(instance.problem.eq(problem.id));
     q.filter(sol_prob.contains((solution.id, problem.id)));

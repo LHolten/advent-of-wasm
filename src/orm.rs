@@ -82,16 +82,9 @@ impl<R> SubQueryRes<R> {
     }
 }
 
+// i could make another trait for correlated contains
+// or just make that the default?
 pub trait ContainsExt: for<'a> SubQueryFunc<'a> + Copy {
-    fn contains<'t>(self, val: <Self as SubQueryFunc<'t>>::Out) -> Contains<'t, Self>
-    where
-        <Self as SubQueryFunc<'t>>::Out: Value<'t>;
-}
-
-impl<F> ContainsExt for F
-where
-    F: for<'a> SubQueryFunc<'a> + Copy,
-{
     fn contains<'t>(self, val: <Self as SubQueryFunc<'t>>::Out) -> Contains<'t, Self>
     where
         <Self as SubQueryFunc<'t>>::Out: Value<'t>,
@@ -99,6 +92,8 @@ where
         Contains { func: self, val }
     }
 }
+
+impl<F> ContainsExt for F where F: for<'a> SubQueryFunc<'a> + Copy {}
 
 #[derive(Clone, Copy)]
 pub struct Contains<'t, F>
