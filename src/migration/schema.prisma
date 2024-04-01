@@ -1,0 +1,75 @@
+generator client {
+    provider = "cargo prisma"
+    output   = "../src/prisma.rs"
+}
+
+datasource db {
+    provider = "sqlite"
+    url      = "file:dev.db"
+}
+
+model Execution {
+    id        Int  @id @default(autoincrement())
+    timestamp Int  @default(dbgenerated("(unixepoch())"))
+    fuelUsed  Int
+    answer    Int?
+
+    solutionId Int
+    solution   Solution @relation(fields: [solutionId], references: [id])
+    instanceId Int
+    instance   Instance @relation(fields: [instanceId], references: [id])
+
+    @@unique([instanceId, solutionId])
+}
+
+model Instance {
+    id        Int @id @default(autoincrement())
+    timestamp Int @default(dbgenerated("(unixepoch())"))
+    seed      Int
+
+    problemId  Int
+    problem    Problem     @relation(fields: [problemId], references: [id])
+    executions Execution[] @relation()
+
+    @@unique([problemId, seed])
+}
+
+model Problem {
+    id        Int    @id @default(autoincrement())
+    timestamp Int    @default(dbgenerated("(unixepoch())"))
+    fileHash  BigInt @unique
+
+    instances   Instance[]   @relation()
+    submissions Submission[] @relation()
+}
+
+model Solution {
+    id        Int    @id @default(autoincrement())
+    timestamp Int    @default(dbgenerated("(unixepoch())"))
+    fileHash  BigInt @unique
+
+    executions  Execution[]  @relation()
+    submissions Submission[] @relation()
+}
+
+model Submission {
+    id        Int @id @default(autoincrement())
+    timestamp Int @default(dbgenerated("(unixepoch())"))
+
+    userId     Int
+    user       User     @relation(fields: [userId], references: [id])
+    solutionId Int
+    solution   Solution @relation(fields: [solutionId], references: [id])
+    problemId  Int
+    problem    Problem  @relation(fields: [problemId], references: [id])
+
+    @@unique([problemId, solutionId, userId])
+}
+
+model User {
+    id        Int    @id @default(autoincrement())
+    timestamp Int    @default(dbgenerated("(unixepoch())"))
+    githubId  BigInt @unique
+
+    submissions Submission[] @relation()
+}

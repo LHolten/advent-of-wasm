@@ -76,3 +76,15 @@ impl<'t, A: Value<'t>, B: Value<'t>> Value<'t> for MyEq<A, B> {
         self.0.into_expr().eq(self.1.into_expr())
     }
 }
+
+#[derive(Clone, Copy)]
+pub struct Const<T>(pub T);
+
+impl<'t, T> Value<'t> for Const<T>
+where
+    T: Into<sea_query::value::Value> + Copy,
+{
+    fn into_expr(self) -> SimpleExpr {
+        SimpleExpr::from(self.0)
+    }
+}

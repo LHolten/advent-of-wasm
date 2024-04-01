@@ -1,7 +1,13 @@
 use rusqlite::ToSql;
 use wasmtime::{Config, Engine};
 
-use crate::{hash::FileHash, include_query, solution::Solution, AppState};
+use crate::{
+    hash::FileHash,
+    include_query,
+    prisma::{submission, PrismaClient},
+    solution::Solution,
+    AppState,
+};
 
 const BENCH_QUEUE: &str = include_query!("bench_queue.prql");
 const EXECUTE: &str = include_query!("execute.prql");
@@ -18,6 +24,12 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
         app.conn.wait();
         println!("querying the database for queue");
         let conn = app.conn.lock();
+
+        let conn: PrismaClient;
+        conn.execution()
+            .find_first(vec![])
+            .order_by(submission::timestamp::order(direction))
+            .include(include);
         let queue = conn
             .prepare(BENCH_QUEUE)?
             .query_map([], |row| {

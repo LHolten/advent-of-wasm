@@ -125,6 +125,10 @@ impl<'t> QueryRef<'t> {
         self.ops.push(Operation::Filter(cond.into_expr()));
     }
 
+    pub fn filter_eq(&mut self, lhs: impl Value<'t>, rhs: impl Value<'t>) {
+        self.filter(lhs.eq(rhs))
+    }
+
     pub fn join<F>(&mut self, other: F) -> <F as SubQueryFunc<'t>>::Out
     where
         F: for<'a> SubQueryFunc<'a>,

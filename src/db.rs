@@ -1,12 +1,15 @@
-use rusqlite::ToSql;
+// use diesel::{insert_into, RunQueryDsl};
+// use diesel::query_dsl::methods::FilterDsl;
 
-use crate::{async_sqlite::SharedConnection, hash::FileHash, include_query};
+use crate::prisma::PrismaClient;
+
+use crate::hash::FileHash;
 
 pub struct GithubId(pub u64);
 
-impl ToSql for GithubId {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        self.0.to_sql()
+impl GithubId {
+    pub fn as_i64(self) -> i64 {
+        i64::from_le_bytes(self.0.to_le_bytes())
     }
 }
 
@@ -18,27 +21,35 @@ pub struct InsertSubmission {
 }
 
 impl InsertSubmission {
-    pub async fn execute(self, conn: &SharedConnection) -> anyhow::Result<()> {
-        let submission_query = include_query!("submit.prql");
-        let submission_insert = format!(
-            "INSERT OR IGNORE INTO submission (problem, user, solution) {submission_query}"
-        );
+    pub async fn execute(self, conn: &PrismaClient) -> anyhow::Result<()> {
+        // use crate::schema::Submission::dsl::*;
+        // use crate::schema::User::dsl::*;
 
-        conn.call(move |conn| {
-            conn.execute(
-                "INSERT OR IGNORE INTO solution (file_hash) VALUES ($1)",
-                [&self.file_hash],
-            )?;
-            conn.execute(
-                &submission_insert,
-                &[
-                    ("@github_id", &self.github_id as &dyn ToSql),
-                    ("@solution_hash", &self.file_hash),
-                    ("@problem_hash", &self.problem_hash),
-                ],
+        // insert_into(Submission).values(&[
+        //     userId::eq(self.github_id),
+        //     solutionId::eq(self.file_hash),
+        //     problemId::eq(self.problem_hash),
+        // ]);
+
+        // User.filter(githubId::eq(self.github_id)).load(conn);
+        // User.
+
+        use crate::prisma::{problem, solution, user};
+        conn.solution()
+            .create(self.file_hash.as_i64(), vec![])
+            .exec()
+            .await?;
+
+        conn.submission()
+            .create(
+                user::github_id::equals(self.github_id.as_i64()),
+                solution::file_hash::equals(self.file_hash.as_i64()),
+                problem::file_hash::equals(self.problem_hash.as_i64()),
+                vec![],
             )
-        })
-        .await?;
+            .exec()
+            .await?;
+
         Ok(())
     }
 }

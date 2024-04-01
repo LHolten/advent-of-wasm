@@ -29,3 +29,7 @@ It is used for tuples and structs etc
 - reference non-copy parameters from outside the query
 - more expressions
 - compile to CTEs for readability
+- other queries
+  - insert
+  - update
+  - delete

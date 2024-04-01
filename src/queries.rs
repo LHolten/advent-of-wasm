@@ -1,5 +1,6 @@
 #![allow(unused)]
 mod bench_queue;
+mod query;
 
 use std::{cell::OnceCell, ops::Deref};
 
@@ -97,6 +98,7 @@ struct Submission<'t> {
     solution: MyIden<'t>,
     problem: MyIden<'t>,
     timestamp: MyIden<'t>,
+    user: MyIden<'t>,
 }
 
 impl Table for Submission<'_> {
@@ -109,6 +111,28 @@ impl Table for Submission<'_> {
             solution: t.get("solution"),
             problem: t.get("problem"),
             timestamp: t.get("timestamp"),
+            user: t.get("user"),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct User<'t> {
+    id: MyIden<'t>,
+    timestamp: MyIden<'t>,
+    github_id: MyIden<'t>,
+}
+
+impl Table for User<'_> {
+    const NAME: &'static str = "user";
+
+    type Out<'t> = User<'t>;
+
+    fn from_table<'t>(mut t: TableRef<'_, 't>) -> Self::Out<'t> {
+        Self::Out {
+            id: t.get("id"),
+            timestamp: t.get("timestamp"),
+            github_id: t.get("github_id"),
         }
     }
 }

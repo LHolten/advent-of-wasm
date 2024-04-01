@@ -2,7 +2,6 @@ use std::{fmt::Display, str::FromStr};
 
 use base64::URL_SAFE_NO_PAD;
 use k12::digest::{ExtendableOutput, Update};
-use rusqlite::{types::*, ToSql};
 use serde::{de, Deserialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -18,17 +17,13 @@ impl FileHash {
     }
 }
 
-impl ToSql for FileHash {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-        let val = i64::from_le_bytes(self.0);
-        Ok(ToSqlOutput::Owned(Value::Integer(val)))
+impl FileHash {
+    pub fn as_i64(self) -> i64 {
+        i64::from_le_bytes(self.0)
     }
-}
 
-impl FromSql for FileHash {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        let bytes = i64::column_result(value)?.to_le_bytes();
-        Ok(FileHash(bytes))
+    pub fn from_i64(val: i64) -> Self {
+        FileHash(val.to_le_bytes())
     }
 }
 
