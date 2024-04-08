@@ -30,28 +30,26 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
             let solution = q.table(tables::Solution);
             let is_executed = q.query(|q| {
                 let exec = q.table(tables::Execution);
-                let mut q = q.group();
-                q.project_eq(&exec.instance, &instance);
-                q.project_eq(&exec.solution, &solution);
-                q.exists()
+                q.filter_on(&exec.instance, &instance);
+                q.filter_on(&exec.solution, &solution);
+                q.group().exists()
             });
             // not executed yet
             q.filter(is_executed.not());
 
             let is_submitted = q.query(|q| {
                 let submission = q.table(Submission);
-                let mut q = q.group();
-                q.project_eq(&submission.problem, &instance.problem);
-                q.project_eq(&submission.solution, &solution);
-                q.exists()
+                q.filter_on(&submission.problem, &instance.problem);
+                q.filter_on(&submission.solution, &solution);
+                q.group().exists()
             });
             // is submitted
             q.filter(is_submitted);
 
             q.into_vec(u32::MAX, |row| QueuedTask {
-                solution_hash: row.get(q.select(solution.file_hash)).into(),
-                problem_hash: row.get(q.select(instance.problem.file_hash)).into(),
-                instance_seed: row.get(q.select(instance.seed)),
+                solution_hash: row.get(solution.file_hash).into(),
+                problem_hash: row.get(instance.problem.file_hash).into(),
+                instance_seed: row.get(instance.seed),
             })
         });
 

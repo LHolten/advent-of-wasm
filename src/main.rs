@@ -68,10 +68,11 @@ async fn main() -> anyhow::Result<()> {
         });
 
         let num = conn.new_query(|q| {
-            let instance = q.table(tables::Instance);
-            q.filter(instance.problem.file_hash.eq(i64::from(*file_hash)));
-            let q = q.group();
-            let count = q.count_distinct(instance);
+            let count = q.query(|q| {
+                let instance = q.table(tables::Instance);
+                q.filter(instance.problem.file_hash.eq(i64::from(*file_hash)));
+                q.group().count_distinct(instance)
+            });
             q.into_vec(1, |row| row.get(count))[0]
         });
 
@@ -137,7 +138,7 @@ async fn get_problem(
                 });
                 q.filter(is_submitted);
                 q.into_vec(u32::MAX, |row| {
-                    FileHash::from(row.get(q.select(solution.file_hash))).to_string()
+                    FileHash::from(row.get(solution.file_hash)).to_string()
                 })
             })
         })
