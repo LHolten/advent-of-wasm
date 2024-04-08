@@ -1,3 +1,0 @@
-from problem
-filter problem.file_hash == s"@problem_hash"
-select [problem.id, s"@seed"]

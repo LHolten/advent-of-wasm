@@ -1,10 +1,15 @@
-use rusqlite::ToSql;
+use rust_query::client::QueryBuilder;
+use rust_query::value::{UnixEpoch, Value};
 use wasmtime::{Config, Engine};
 
-use crate::{hash::FileHash, include_query, solution::Solution, AppState};
+use crate::tables::{Execution, ExecutionDummy, Instance};
+use crate::{
+    hash::FileHash,
+    solution::Solution,
+    tables::{self, Submission},
+    AppState,
+};
 
-const BENCH_QUEUE: &str = include_query!("bench_queue.prql");
-const EXECUTE: &str = include_query!("execute.prql");
 struct QueuedTask {
     solution_hash: FileHash,
     problem_hash: FileHash,
@@ -13,21 +18,43 @@ struct QueuedTask {
 
 pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
     let problem_engine = Engine::default();
-    let solution_engine = Engine::new(&Config::new().consume_fuel(true))?;
+    let solution_engine = Engine::new(Config::new().consume_fuel(true))?;
     loop {
+        // wait for database state to change
         app.conn.wait();
         println!("querying the database for queue");
         let conn = app.conn.lock();
-        let queue = conn
-            .prepare(BENCH_QUEUE)?
-            .query_map([], |row| {
-                Ok(QueuedTask {
-                    solution_hash: row.get("solution_hash")?,
-                    problem_hash: row.get("problem_hash")?,
-                    instance_seed: row.get("instance_seed")?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        let queue = conn.new_query(|q| {
+            let instance = q.table(tables::Instance);
+            let solution = q.table(tables::Solution);
+            let is_executed = q.query(|q| {
+                let exec = q.table(tables::Execution);
+                let mut q = q.group();
+                q.project_eq(&exec.instance, &instance);
+                q.project_eq(&exec.solution, &solution);
+                q.exists()
+            });
+            // not executed yet
+            q.filter(is_executed.not());
+
+            let is_submitted = q.query(|q| {
+                let submission = q.table(Submission);
+                let mut q = q.group();
+                q.project_eq(&submission.problem, &instance.problem);
+                q.project_eq(&submission.solution, &solution);
+                q.exists()
+            });
+            // is submitted
+            q.filter(is_submitted);
+
+            q.into_vec(u32::MAX, |row| QueuedTask {
+                solution_hash: row.get(q.select(solution.file_hash)).into(),
+                problem_hash: row.get(q.select(instance.problem.file_hash)).into(),
+                instance_seed: row.get(q.select(instance.seed)),
+            })
+        });
+
         drop(conn);
 
         println!("{} new tasks queued", queue.len());
@@ -41,16 +68,23 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
 
             let run_result = solution.run(&solution_engine, &instance.input, problem.fuel_limit);
 
-            let sql =
-                format!("INSERT INTO execution (fuel_used, answer, instance, solution) {EXECUTE}");
             let conn = app.conn.lock();
-            conn.prepare(&sql)?.execute(&[
-                ("@fuel", &run_result.fuel_used as &dyn ToSql),
-                ("@answer", &run_result.answer),
-                ("@instance_seed", &task.instance_seed),
-                ("@solution_hash", &task.solution_hash),
-                ("@problem_hash", &task.problem_hash),
-            ])?;
+
+            conn.new_query(|q| {
+                let instance = q.table(Instance);
+                q.filter(instance.problem.file_hash.eq(i64::from(task.problem_hash)));
+                q.filter(instance.seed.eq(task.instance_seed));
+                let solution = q.table(tables::Solution);
+                q.filter(solution.file_hash.eq(i64::from(task.solution_hash)));
+
+                q.insert::<Execution>(ExecutionDummy {
+                    answer: q.select(&run_result.answer),
+                    fuel_used: q.select(run_result.fuel_used as i64),
+                    instance: q.select(instance),
+                    solution: q.select(solution),
+                    timestamp: q.select(UnixEpoch),
+                });
+            });
         }
     }
 }

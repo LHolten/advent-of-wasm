@@ -1,8 +1,0 @@
-from problem
-filter problem.file_hash == s"@hash"
-join submission [submission.problem==problem.id]
-group submission.solution (
-    aggregate []
-)
-join sol=solution [solution==sol.id]
-select [sol.file_hash]

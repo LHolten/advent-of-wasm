@@ -12,7 +12,7 @@ use db::GithubId;
 use maud::html;
 use problem::ProblemDir;
 use rand::{thread_rng, RngCore};
-use rusqlite::{Connection, ToSql};
+use rusqlite::Connection;
 
 mod async_sqlite;
 mod bencher;
@@ -22,10 +22,24 @@ mod migration;
 mod problem;
 mod solution;
 
+pub mod tables {
+    include!(concat!(env!("OUT_DIR"), "/tables.rs"));
+}
+
 use async_sqlite::SharedConnection;
 use migration::initialize_db;
+use rust_query::{
+    client::QueryBuilder,
+    value::{UnixEpoch, Value},
+};
+use tables::UserDummy;
 
-use crate::{db::InsertSubmission, solution::verify_wasm};
+use crate::{
+    db::InsertSubmission,
+    hash::FileHash,
+    solution::verify_wasm,
+    tables::{InstanceDummy, ProblemDummy},
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -45,35 +59,42 @@ async fn main() -> anyhow::Result<()> {
         let real_file_hash = problem.file_name.hash()?;
         assert_eq!(file_hash.to_string(), real_file_hash.to_string());
 
-        conn.execute(
-            r"INSERT OR IGNORE INTO problem (file_hash) VALUES ($1)",
-            [&file_hash],
-        )?;
+        conn.new_query(|q| {
+            // on conflict do nothing
+            q.insert::<tables::Problem>(ProblemDummy {
+                file_hash: q.select(i64::from(*file_hash)),
+                timestamp: q.select(UnixEpoch),
+            })
+        });
 
-        let num: u32 = conn.query_row(
-            include_query!("bench_list.prql"),
-            &[("@problem_hash", &file_hash)],
-            |row| row.get("count"),
-        )?;
+        let num = conn.new_query(|q| {
+            let instance = q.table(tables::Instance);
+            q.filter(instance.problem.file_hash.eq(i64::from(*file_hash)));
+            let q = q.group();
+            let count = q.count_distinct(instance);
+            q.into_vec(1, |row| row.get(count))[0]
+        });
+
         let mut rng = thread_rng();
+        // add instances so that there are enough for the benchmark
         for _ in (0..problem.leaderboard_instances).skip(num as usize) {
-            let sql = format!(
-                "INSERT INTO instance (problem, seed) {}",
-                include_query!("instance.prql")
-            );
-            conn.execute(
-                &sql,
-                &[
-                    ("@problem_hash", &file_hash as &dyn ToSql),
-                    ("@seed", &(rng.next_u64() as i64)),
-                ],
-            )?;
+            conn.new_query(|q| {
+                let problem = db::get_problem(q, *file_hash);
+                q.insert::<tables::Instance>(InstanceDummy {
+                    problem: q.select(problem),
+                    seed: q.select(rng.next_u64() as i64),
+                    timestamp: q.select(UnixEpoch),
+                })
+            });
         }
     }
-    conn.execute(
-        "INSERT OR IGNORE INTO user (github_id) VALUES ($1)",
-        [&DUMMY_USER],
-    )?;
+
+    conn.new_query(|q| {
+        q.insert::<tables::User>(UserDummy {
+            github_id: q.select(DUMMY_USER.0 as i64),
+            timestamp: q.select(UnixEpoch),
+        })
+    });
 
     let conn = SharedConnection::new(conn);
     let app_state = AppState { problem_dir, conn };
@@ -99,17 +120,26 @@ async fn get_problem(
     uri: Uri,
 ) -> impl IntoResponse {
     println!("got user for {file_name}");
+
+    let file_hash = app.problem_dir.mapping[&file_name];
+
     let data = app
         .conn
         .call(move |conn| {
-            let mut prepared = conn.prepare(include_query!("problem.prql")).unwrap();
-            prepared
-                .query_map(&[("@hash", &*file_name)], |row| {
-                    row.get::<_, String>("submission.solution")
+            // list solutions for this problem
+            conn.new_query(|q| {
+                let solution = q.table(tables::Solution);
+                let is_submitted = q.query(|q| {
+                    let submission = q.table(tables::Submission);
+                    q.filter(submission.problem.file_hash.eq(i64::from(file_hash)));
+                    let q = q.group();
+                    q.exists()
+                });
+                q.filter(is_submitted);
+                q.into_vec(u32::MAX, |row| {
+                    FileHash::from(row.get(q.select(solution.file_hash))).to_string()
                 })
-                .expect("parameters were wrong")
-                .collect::<rusqlite::Result<Vec<_>>>()
-                .expect("could not get problems from db")
+            })
         })
         .await;
     let res = html! {
@@ -119,10 +149,10 @@ async fn get_problem(
             a href="https://github.com/lambda-fairy/maud" { "Maud" }
             " template language."
         }
-        // p.test {
-        //     "btw, the problem name is "
-        //     b {(file_name)}
-        // }
+        p.test {
+            "btw, the problem name is "
+            b {(file_name)}
+        }
         ul {
             @for solution in &data {
                 li {

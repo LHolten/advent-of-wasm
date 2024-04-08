@@ -19,10 +19,10 @@ pub struct RunResult {
 impl Solution {
     pub fn run(&self, engine: &Engine, data: &[u8], fuel: u64) -> RunResult {
         let path = format!("solution/{}.wasm", &self.hash);
-        let module = ModulePath(path.into()).load(&engine).unwrap();
+        let module = ModulePath(path.into()).load(engine).unwrap();
         // first instantiate, this calls optional start
         // add some fuel here so the program can run
-        let mut store = Store::new(&engine, ());
+        let mut store = Store::new(engine, ());
         store.add_fuel(fuel).unwrap();
         let instance = Linker::new(engine)
             .instantiate(&mut store, &module)

@@ -1,4 +1,0 @@
-from problem
-filter problem.file_hash == s"@problem_hash"
-join instance [instance.problem == problem.id]
-aggregate [count = count]

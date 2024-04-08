@@ -1,8 +1,0 @@
-from problem 
-filter problem.file_hash == s"@problem_hash"
-join instance [
-    instance.seed == s"@instance_seed",
-    instance.problem == problem.id,
-]
-join solution [solution.file_hash == s"@solution_hash"]
-select [s"@fuel", s"@answer", instance.id, solution.id]

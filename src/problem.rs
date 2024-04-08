@@ -39,7 +39,7 @@ impl ModulePath {
             return module;
         }
         let module = Module::from_file(engine, &self.0)?;
-        fs::write(self.cache_path()?, &module.serialize()?)?;
+        fs::write(self.cache_path()?, module.serialize()?)?;
         module
     }
 
@@ -113,7 +113,7 @@ mod tests {
         let solution = Solution {
             hash: "bDHNXb6S_4Y".parse().unwrap(),
         };
-        let engine = Engine::new(&Config::new().consume_fuel(true))?;
+        let engine = Engine::new(Config::new().consume_fuel(true))?;
         let res = solution.run(&engine, &problem.input, 10000);
         assert_eq!(res.answer, Some(30));
 

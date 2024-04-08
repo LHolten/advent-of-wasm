@@ -1,6 +1,15 @@
 use rusqlite::ToSql;
+use rust_query::{
+    client::QueryBuilder,
+    value::{Db, UnixEpoch, Value},
+    Query,
+};
 
-use crate::{async_sqlite::SharedConnection, hash::FileHash, include_query};
+use crate::{
+    async_sqlite::SharedConnection,
+    hash::FileHash,
+    tables::{self, SolutionDummy, SubmissionDummy},
+};
 
 pub struct GithubId(pub u64);
 
@@ -19,26 +28,45 @@ pub struct InsertSubmission {
 
 impl InsertSubmission {
     pub async fn execute(self, conn: &SharedConnection) -> anyhow::Result<()> {
-        let submission_query = include_query!("submit.prql");
-        let submission_insert = format!(
-            "INSERT OR IGNORE INTO submission (problem, user, solution) {submission_query}"
-        );
-
-        conn.call(move |conn| {
-            conn.execute(
-                "INSERT OR IGNORE INTO solution (file_hash) VALUES ($1)",
-                [&self.file_hash],
-            )?;
-            conn.execute(
-                &submission_insert,
-                &[
-                    ("@github_id", &self.github_id as &dyn ToSql),
-                    ("@solution_hash", &self.file_hash),
-                    ("@problem_hash", &self.problem_hash),
-                ],
-            )
+        conn.call(move |conn| -> rusqlite::Result<()> {
+            conn.new_query(|q| {
+                q.insert::<tables::Solution>(SolutionDummy {
+                    file_hash: q.select(i64::from(self.file_hash)),
+                    timestamp: q.select(UnixEpoch),
+                })
+            });
+            conn.new_query(|q| {
+                let problem = get_problem(q, self.problem_hash);
+                let solution = get_solution(q, self.file_hash);
+                let user = get_user(q, self.github_id);
+                q.insert::<tables::Submission>(SubmissionDummy {
+                    problem: q.select(problem),
+                    solution: q.select(solution),
+                    timestamp: q.select(UnixEpoch),
+                    user: q.select(user),
+                })
+            });
+            Ok(())
         })
         .await?;
         Ok(())
     }
+}
+
+pub fn get_problem<'t>(q: &mut Query<'_, 't>, has: FileHash) -> Db<'t, tables::Problem> {
+    let problem = q.table(tables::Problem);
+    q.filter(problem.file_hash.eq(i64::from(has)));
+    problem
+}
+
+pub fn get_solution<'t>(q: &mut Query<'_, 't>, hash: FileHash) -> Db<'t, tables::Solution> {
+    let solution = q.table(tables::Solution);
+    q.filter(solution.file_hash.eq(i64::from(hash)));
+    solution
+}
+
+pub fn get_user<'t>(q: &mut Query<'_, 't>, github_id: GithubId) -> Db<'t, tables::User> {
+    let user = q.table(tables::User);
+    q.filter(user.github_id.eq(github_id.0 as i64));
+    user
 }

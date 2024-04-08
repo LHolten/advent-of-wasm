@@ -5,17 +5,6 @@ fn list_migrations() -> Migrations<'static> {
     Migrations::new(vec![M::up(include_str!("migration/initial.sql"))])
 }
 
-// Test that migrations are working
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn migrations_test() -> rusqlite_migration::Result<()> {
-        list_migrations().validate()
-    }
-}
-
 pub fn initialize_db(conn: &mut Connection) -> anyhow::Result<()> {
     list_migrations().to_latest(conn)?;
 
@@ -26,9 +15,13 @@ pub fn initialize_db(conn: &mut Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[macro_export]
-macro_rules! include_query {
-    ($filename:expr) => {
-        include_str!(concat!(env!("OUT_DIR"), "/queries/", $filename))
-    };
+// Test that migrations are working
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migrations_test() -> rusqlite_migration::Result<()> {
+        list_migrations().validate()
+    }
 }
