@@ -2,7 +2,7 @@ use rust_query::client::QueryBuilder;
 use rust_query::value::{UnixEpoch, Value};
 use wasmtime::{Config, Engine};
 
-use crate::tables::{Execution, ExecutionDummy, Instance};
+use crate::tables::{ExecutionDummy, Instance};
 use crate::{
     hash::FileHash,
     solution::Solution,
@@ -75,7 +75,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                 let solution = q.table(tables::Solution);
                 q.filter(solution.file_hash.eq(i64::from(task.solution_hash)));
 
-                q.insert::<Execution>(ExecutionDummy {
+                q.insert(ExecutionDummy {
                     answer: q.select(&run_result.answer),
                     fuel_used: q.select(run_result.fuel_used as i64),
                     instance: q.select(instance),

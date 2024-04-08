@@ -61,7 +61,7 @@ async fn main() -> anyhow::Result<()> {
 
         conn.new_query(|q| {
             // on conflict do nothing
-            q.insert::<tables::Problem>(ProblemDummy {
+            q.insert(ProblemDummy {
                 file_hash: q.select(i64::from(*file_hash)),
                 timestamp: q.select(UnixEpoch),
             })
@@ -81,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
         for _ in (0..problem.leaderboard_instances).skip(num as usize) {
             conn.new_query(|q| {
                 let problem = db::get_problem(q, *file_hash);
-                q.insert::<tables::Instance>(InstanceDummy {
+                q.insert(InstanceDummy {
                     problem: q.select(problem),
                     seed: q.select(rng.next_u64() as i64),
                     timestamp: q.select(UnixEpoch),
@@ -91,7 +91,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     conn.new_query(|q| {
-        q.insert::<tables::User>(UserDummy {
+        q.insert(UserDummy {
             github_id: q.select(DUMMY_USER.0 as i64),
             timestamp: q.select(UnixEpoch),
         })
