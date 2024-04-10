@@ -23,7 +23,7 @@ pub async fn web_server(problem_dir: Arc<ProblemDir>, conn: Connection) -> anyho
     // build our application with a single route
     let app = Router::new()
         .route("/problem/:problem", get(get_problem))
-        .route("/problem/:problem/upload", post(upload))
+        .route("/problem/:problem", post(upload))
         .route("/problem/:problem/:solution_hash", get(submission))
         .with_state(app_state.clone());
 

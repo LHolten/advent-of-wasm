@@ -25,7 +25,7 @@ pub async fn submission(
     struct SolutionStats {
         seed: i64,
         fuel: i64,
-        answer: Option<i64>,
+        status: String,
     }
 
     let data = app
@@ -39,7 +39,16 @@ pub async fn submission(
                 q.into_vec(u32::MAX, |row| SolutionStats {
                     seed: row.get(exec.instance.seed),
                     fuel: row.get(exec.fuel_used),
-                    answer: row.get(exec.answer),
+                    status: if let Some(answer) = row.get(exec.answer) {
+                        if answer == row.get(exec.instance.answer) {
+                            "correct"
+                        } else {
+                            "wrong"
+                        }
+                    } else {
+                        "error"
+                    }
+                    .to_owned(),
                 })
             })
         })
@@ -61,7 +70,7 @@ pub async fn submission(
                 tr {
                     th { "Instance Seed" }
                     th { "Fuel Used" }
-                    th { "Answer" }
+                    th { "Status" }
                 }
             }
             tbody {
@@ -69,7 +78,7 @@ pub async fn submission(
                     tr {
                         td {(solution.seed)}
                         td {(solution.fuel)}
-                        td {(solution.answer.as_ref().map(i64::to_string).unwrap_or("error".to_owned()))}
+                        td {(solution.status)}
                     }
                 }
             }

@@ -41,7 +41,10 @@ impl Solution {
         memory.write(&mut store, heap_base as usize, data).unwrap();
 
         // call the actual solve function
-        let answer = func.call(&mut store, data.len() as i32).ok();
+        let answer = func
+            .call(&mut store, data.len() as i32)
+            .inspect_err(|e| println!("ERROR: {} {e}", self.hash))
+            .ok();
 
         RunResult {
             fuel_used: store.fuel_consumed().unwrap(),

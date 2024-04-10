@@ -89,7 +89,10 @@ impl Problem {
             .context("memory was not defined")?;
         memory.read(&store, offset as usize, &mut input)?;
 
-        TaskInstance { input, answer: 0 }
+        let solution: TypedFunc<_, i64> = instance.get_typed_func(&mut store, "solution")?;
+        let answer = solution.call(&mut store, (offset, length))?;
+
+        TaskInstance { input, answer }
     }
 }
 

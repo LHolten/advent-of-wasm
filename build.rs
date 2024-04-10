@@ -6,10 +6,10 @@ fn main() {
     let dest_path = Path::new(&out_dir).join("tables.rs");
 
     let client = Client::open_in_memory();
-    client.execute_batch(include_str!("src/migration/initial.sql"));
+    client.execute_batch(include_str!("src/migration/000_initial.sql"));
     let code = generate(client);
     fs::write(dest_path, code).unwrap();
 
-    println!("cargo::rerun-if-changed=src/migration/initial.sql");
+    println!("cargo::rerun-if-changed=src/migration/000_initial.sql");
     println!("cargo::rerun-if-changed=build.rs");
 }

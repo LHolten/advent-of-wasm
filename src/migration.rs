@@ -2,7 +2,7 @@ use rusqlite::Connection;
 use rusqlite_migration::{Migrations, M};
 
 fn list_migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(include_str!("migration/initial.sql"))])
+    Migrations::new(vec![M::up(include_str!("migration/000_initial.sql"))])
 }
 
 pub fn initialize_db(conn: &mut Connection) -> anyhow::Result<()> {

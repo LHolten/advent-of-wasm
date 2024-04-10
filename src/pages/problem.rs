@@ -18,7 +18,7 @@ use crate::{
 pub async fn get_problem(
     State(app): State<AppState>,
     Path(problem): Path<String>,
-    uri: Uri,
+    // uri: Uri,
 ) -> Result<Html<String>, StatusCode> {
     println!("got user for {problem}");
 
@@ -53,7 +53,7 @@ pub async fn get_problem(
                 });
                 q.into_vec(u32::MAX, |row| SolutionStats {
                     name: FileHash::from(row.get(solution.file_hash)).to_string(),
-                    average: row.get(average).unwrap(),
+                    average: row.get(average).unwrap_or(0),
                 })
             })
         })
@@ -76,14 +76,14 @@ pub async fn get_problem(
             tbody {
                 @for solution in &data {
                     tr {
-                        td { a href={(uri.path())"/"(solution.name)} {(solution.name)} }
+                        td { a href={(problem)"/"(solution.name)} {(solution.name)} }
                         td {(solution.average)}
                     }
                 }
             }
         }
         br;
-        form action={(uri.path())"/upload"} method="post" enctype="multipart/form-data" target="_blank" {
+        form method="post" enctype="multipart/form-data" {
             label { "wasm file: " }
             input type="file" name="wasm";
             br;
@@ -97,7 +97,7 @@ pub async fn upload(
     State(app): State<AppState>,
     Path(file_name): Path<String>,
     mut multipart: Multipart,
-) {
+) -> Result<Html<String>, StatusCode> {
     println!("got multipart");
 
     while let Some(field) = multipart.next_field().await.unwrap() {
@@ -108,7 +108,7 @@ pub async fn upload(
         if &name == "wasm" {
             if let Err(e) = verify_wasm(&data) {
                 println!("user upload error: {}", e);
-                return;
+                break;
             }
 
             let hash = hash::FileHash::new(&data);
@@ -126,4 +126,6 @@ pub async fn upload(
 
         println!("Length of `{name}` is {data_len} bytes");
     }
+
+    get_problem(State(app), Path(file_name)).await
 }
