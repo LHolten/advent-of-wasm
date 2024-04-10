@@ -160,15 +160,25 @@ async fn get_problem(
         .await;
 
     let res = html! {
+        style { (include_str!("style.css")) }
         p.test {
             "The problem name is "
             b {(file_name)}
         }
-        ul {
-            @for solution in &data {
-                li {
-                    {(solution.name)} " : "
-                    {(solution.average)}
+        table {
+            // caption { "Scores" }
+            thead {
+                tr {
+                    th { "Solution" }
+                    th { "Average Fuel" }
+                }
+            }
+            tbody {
+                @for solution in &data {
+                    tr {
+                        td {(solution.name)}
+                        td {(solution.average)}
+                    }
                 }
             }
         }
