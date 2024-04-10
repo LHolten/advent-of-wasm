@@ -23,7 +23,7 @@ pub async fn submission(
     let solution_hash: FileHash = solution_hash.parse().map_err(|_| StatusCode::NOT_FOUND)?;
 
     struct SolutionStats {
-        seed: i64,
+        seed: u64,
         fuel: i64,
         status: String,
     }
@@ -37,7 +37,7 @@ pub async fn submission(
                 q.filter(exec.instance.problem.file_hash.eq(i64::from(problem_hash)));
                 q.filter(exec.solution.file_hash.eq(i64::from(solution_hash)));
                 q.into_vec(u32::MAX, |row| SolutionStats {
-                    seed: row.get(exec.instance.seed),
+                    seed: row.get(exec.instance.seed) as u64,
                     fuel: row.get(exec.fuel_used),
                     status: if let Some(answer) = row.get(exec.answer) {
                         if answer == row.get(exec.instance.answer) {
