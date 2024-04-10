@@ -8,9 +8,13 @@ use rusqlite::Connection;
 
 use crate::{async_sqlite::SharedConnection, bencher::bencher_main, problem::ProblemDir, AppState};
 
-use self::problem::{get_problem, upload};
+use self::{
+    problem::{get_problem, upload},
+    submission::submission,
+};
 
 mod problem;
+mod submission;
 
 pub async fn web_server(problem_dir: Arc<ProblemDir>, conn: Connection) -> anyhow::Result<()> {
     let conn = SharedConnection::new(conn);
@@ -18,8 +22,9 @@ pub async fn web_server(problem_dir: Arc<ProblemDir>, conn: Connection) -> anyho
 
     // build our application with a single route
     let app = Router::new()
-        .route("/problem/:file_name", get(get_problem))
-        .route("/problem/:file_name/upload", post(upload))
+        .route("/problem/:problem", get(get_problem))
+        .route("/problem/:problem/upload", post(upload))
+        .route("/problem/:problem/:solution_hash", get(submission))
         .with_state(app_state.clone());
 
     // start the bencher

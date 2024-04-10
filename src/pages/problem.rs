@@ -17,15 +17,15 @@ use crate::{
 
 pub async fn get_problem(
     State(app): State<AppState>,
-    Path(file_name): Path<String>,
+    Path(problem): Path<String>,
     uri: Uri,
 ) -> Result<Html<String>, StatusCode> {
-    println!("got user for {file_name}");
+    println!("got user for {problem}");
 
-    let file_hash = *app
+    let problem_hash = *app
         .problem_dir
         .mapping
-        .get(&file_name)
+        .get(&problem)
         .ok_or(StatusCode::NOT_FOUND)?;
 
     struct SolutionStats {
@@ -41,14 +41,14 @@ pub async fn get_problem(
                 let solution = q.table(tables::Solution);
                 let is_submitted = q.query(|q| {
                     let submission = q.table(tables::Submission);
-                    q.filter(submission.problem.file_hash.eq(i64::from(file_hash)));
+                    q.filter(submission.problem.file_hash.eq(i64::from(problem_hash)));
                     q.group().exists()
                 });
                 q.filter(is_submitted);
                 let average = q.query(|q| {
                     let exec = q.table(tables::Execution);
                     q.filter_on(&exec.solution, &solution);
-                    q.filter(exec.instance.problem.file_hash.eq(i64::from(file_hash)));
+                    q.filter(exec.instance.problem.file_hash.eq(i64::from(problem_hash)));
                     q.group().max(exec.fuel_used)
                 });
                 q.into_vec(u32::MAX, |row| SolutionStats {
@@ -63,7 +63,7 @@ pub async fn get_problem(
         style { (include_str!("style.css")) }
         p.test {
             "The problem name is "
-            b {(file_name)}
+            b {(problem)}
         }
         table {
             // caption { "Scores" }
@@ -76,7 +76,7 @@ pub async fn get_problem(
             tbody {
                 @for solution in &data {
                     tr {
-                        td {(solution.name)}
+                        td { a href={(uri.path())"/"(solution.name)} {(solution.name)} }
                         td {(solution.average)}
                     }
                 }
