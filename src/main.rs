@@ -2,8 +2,8 @@ use std::{fs, sync::Arc, thread};
 
 use axum::{
     extract::{Multipart, Path, State},
-    http::Uri,
-    response::{Html, IntoResponse},
+    http::{StatusCode, Uri},
+    response::Html,
     routing::{get, post},
     Router,
 };
@@ -119,10 +119,19 @@ async fn get_problem(
     State(app): State<AppState>,
     Path(file_name): Path<String>,
     uri: Uri,
-) -> impl IntoResponse {
+) -> Result<Html<String>, StatusCode> {
     println!("got user for {file_name}");
 
-    let file_hash = app.problem_dir.mapping[&file_name];
+    let file_hash = *app
+        .problem_dir
+        .mapping
+        .get(&file_name)
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    struct SolutionStats {
+        name: String,
+        average: i64,
+    }
 
     let data = app
         .conn
@@ -133,31 +142,33 @@ async fn get_problem(
                 let is_submitted = q.query(|q| {
                     let submission = q.table(tables::Submission);
                     q.filter(submission.problem.file_hash.eq(i64::from(file_hash)));
-                    let q = q.group();
-                    q.exists()
+                    q.group().exists()
                 });
                 q.filter(is_submitted);
-                q.into_vec(u32::MAX, |row| {
-                    FileHash::from(row.get(solution.file_hash)).to_string()
+                let average = q.query(|q| {
+                    let exec = q.table(tables::Execution);
+                    q.filter_on(&exec.solution, &solution);
+                    q.filter(exec.instance.problem.file_hash.eq(i64::from(file_hash)));
+                    q.group().avg(exec.fuel_used)
+                });
+                q.into_vec(u32::MAX, |row| SolutionStats {
+                    name: FileHash::from(row.get(solution.file_hash)).to_string(),
+                    average: row.get(average).unwrap(),
                 })
             })
         })
         .await;
+
     let res = html! {
-        h1 { "Hello, world!" }
-        p.intro {
-            "This is an example of the "
-            a href="https://github.com/lambda-fairy/maud" { "Maud" }
-            " template language."
-        }
         p.test {
-            "btw, the problem name is "
+            "The problem name is "
             b {(file_name)}
         }
         ul {
             @for solution in &data {
                 li {
-                    {(solution)}
+                    {(solution.name)} " : "
+                    {(solution.average)}
                 }
             }
         }
@@ -169,7 +180,7 @@ async fn get_problem(
             input type="submit";
         }
     };
-    Html(res.into_string())
+    Ok(Html(res.into_string()))
 }
 
 async fn upload(
