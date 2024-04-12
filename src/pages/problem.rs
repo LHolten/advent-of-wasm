@@ -31,7 +31,7 @@ pub async fn get_problem(
 
     struct SolutionStats {
         name: String,
-        average: i64,
+        max_fuel: String,
     }
 
     let data = app
@@ -40,21 +40,33 @@ pub async fn get_problem(
             // list solutions for this problem
             conn.new_query(|q| {
                 let solution = q.table(tables::Solution);
-                let is_submitted = q.query(|q| {
-                    let submission = q.table(tables::Submission);
-                    q.filter(submission.problem.file_hash.eq(i64::from(problem_hash)));
+                q.filter(solution.problem.file_hash.eq(i64::from(problem_hash)));
+                let fail = q.query(|q| {
+                    let failures = q.table(tables::Failure);
+                    q.filter_on(&failures.solution, &solution);
                     q.group().exists()
                 });
-                q.filter(is_submitted);
-                let average = q.query(|q| {
+                let total_instances = q.query(|q| {
+                    let instance = q.table(tables::Instance);
+                    q.filter(instance.problem.file_hash.eq(i64::from(problem_hash)));
+                    q.group().count_distinct(instance)
+                });
+                let (max_fuel, count) = q.query(|q| {
                     let exec = q.table(tables::Execution);
                     q.filter_on(&exec.solution, &solution);
                     q.filter(exec.instance.problem.file_hash.eq(i64::from(problem_hash)));
-                    q.group().max(exec.fuel_used)
+                    let group = &q.group();
+                    (group.max(exec.fuel_used), group.count_distinct(exec))
                 });
                 q.into_vec(u32::MAX, |row| SolutionStats {
                     name: FileHash::from(row.get(solution.file_hash)).to_string(),
-                    average: row.get(average).unwrap_or(0),
+                    max_fuel: if row.get(fail) {
+                        "Failed".to_owned()
+                    } else if row.get(count) == row.get(total_instances) {
+                        row.get(max_fuel).unwrap().to_string()
+                    } else {
+                        format!("benched {} / {}", row.get(count), row.get(total_instances))
+                    },
                 })
             })
         })
@@ -75,7 +87,7 @@ pub async fn get_problem(
                 @for solution in &data {
                     tr {
                         td { a href={(problem)"/"(solution.name)} {(solution.name)} }
-                        td {(solution.average)}
+                        td {(solution.max_fuel)}
                     }
                 }
             }

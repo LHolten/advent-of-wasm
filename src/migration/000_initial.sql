@@ -1,18 +1,17 @@
 -- integer primary keys do not need to be marked NOT NULL
--- REFERENCES on id should use ON UPDATE CASCADE
+-- REFERENCES on id should use 
 CREATE TABLE problem (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
     file_hash INTEGER NOT NULL UNIQUE
 ) STRICT;
 
--- a problem instance
+-- a problem benchmark instance
 CREATE TABLE instance (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    problem INTEGER NOT NULL REFERENCES problem ON UPDATE CASCADE,
+    problem INTEGER NOT NULL REFERENCES problem,
     seed INTEGER NOT NULL,
-    answer INTEGER NOT NULL,
     UNIQUE (problem, seed)
 ) STRICT;
 
@@ -20,7 +19,20 @@ CREATE TABLE instance (
 CREATE TABLE solution (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    file_hash INTEGER NOT NULL UNIQUE
+    file_hash INTEGER NOT NULL,
+    problem INTEGER NOT NULL REFERENCES problem,
+    -- how many random tests did this solution pass
+    random_tests INTEGER NOT NULL,
+    -- solutions can only be submitted to a problem once
+    UNIQUE (file_hash, problem)
+) STRICT;
+
+-- a random test "or benchmark test" failed
+CREATE TABLE failure (
+    id INTEGER PRIMARY KEY,
+    timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
+    solution INTEGER NOT NULL UNIQUE REFERENCES solution,
+    seed INTEGER NOT NULL
 ) STRICT;
 
 -- a user of the server
@@ -30,14 +42,13 @@ CREATE TABLE user (
     github_id INTEGER NOT NULL UNIQUE
 ) STRICT;
 
--- a solution applied to a problem is a submission. it is associated with a user.
+-- who uploaded the solution
 CREATE TABLE submission (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    problem INTEGER NOT NULL REFERENCES problem ON UPDATE CASCADE,
-    solution INTEGER NOT NULL REFERENCES solution ON UPDATE CASCADE,
-    user INTEGER NOT NULL REFERENCES user ON UPDATE CASCADE,
-    UNIQUE (problem, solution, user)
+    solution INTEGER NOT NULL REFERENCES solution,
+    user INTEGER NOT NULL REFERENCES user,
+    UNIQUE (solution, user)
 ) STRICT;
 
 -- a solution applied to a problem instance results in an execution
@@ -47,7 +58,7 @@ CREATE TABLE execution (
     fuel_used INTEGER NOT NULL,
     -- answer can be null if the solution crashed
     answer INTEGER,
-    instance INTEGER NOT NULL REFERENCES instance ON UPDATE CASCADE,
-    solution INTEGER NOT NULL REFERENCES solution ON UPDATE CASCADE,
+    instance INTEGER NOT NULL REFERENCES instance,
+    solution INTEGER NOT NULL REFERENCES solution,
     UNIQUE (instance, solution)
 ) STRICT;

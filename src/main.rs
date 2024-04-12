@@ -26,7 +26,6 @@ use rust_query::{
     value::{UnixEpoch, Value},
 };
 use tables::UserDummy;
-use wasmtime::Engine;
 
 use crate::tables::{InstanceDummy, ProblemDummy};
 
@@ -69,7 +68,6 @@ async fn main() -> anyhow::Result<()> {
         // add instances so that there are enough for the benchmark
         for _ in (0..problem.leaderboard_instances).skip(num as usize) {
             let seed = rng.next_u64() as i64;
-            let instance = problem.generate(&Engine::default(), seed)?;
 
             conn.new_query(|q| {
                 let problem = db::get_problem(q, *file_hash);
@@ -77,7 +75,6 @@ async fn main() -> anyhow::Result<()> {
                     problem: q.select(problem),
                     seed: q.select(seed),
                     timestamp: q.select(UnixEpoch),
-                    answer: q.select(instance.answer),
                 })
             });
         }

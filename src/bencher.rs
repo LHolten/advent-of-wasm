@@ -6,7 +6,7 @@ use crate::tables::{ExecutionDummy, Instance};
 use crate::{
     hash::FileHash,
     solution::Solution,
-    tables::{self, Submission},
+    tables::{self},
     AppState,
 };
 
@@ -28,6 +28,8 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
         let queue = conn.new_query(|q| {
             let instance = q.table(tables::Instance);
             let solution = q.table(tables::Solution);
+            q.filter((&instance.problem).eq(&solution.problem));
+
             let is_executed = q.query(|q| {
                 let exec = q.table(tables::Execution);
                 q.filter_on(&exec.instance, &instance);
@@ -36,15 +38,6 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
             });
             // not executed yet
             q.filter(is_executed.not());
-
-            let is_submitted = q.query(|q| {
-                let submission = q.table(Submission);
-                q.filter_on(&submission.problem, &instance.problem);
-                q.filter_on(&submission.solution, &solution);
-                q.group().exists()
-            });
-            // is submitted
-            q.filter(is_submitted);
 
             q.into_vec(u32::MAX, |row| QueuedTask {
                 solution_hash: row.get(solution.file_hash).into(),

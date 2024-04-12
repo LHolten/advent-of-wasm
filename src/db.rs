@@ -30,17 +30,18 @@ impl InsertSubmission {
     pub async fn execute(self, conn: &SharedConnection) -> anyhow::Result<()> {
         conn.call(move |conn| -> rusqlite::Result<()> {
             conn.new_query(|q| {
+                let problem = get_problem(q, self.problem_hash);
                 q.insert(SolutionDummy {
                     file_hash: q.select(i64::from(self.file_hash)),
                     timestamp: q.select(UnixEpoch),
+                    problem: q.select(problem),
+                    random_tests: q.select(0),
                 })
             });
             conn.new_query(|q| {
-                let problem = get_problem(q, self.problem_hash);
                 let solution = get_solution(q, self.file_hash);
                 let user = get_user(q, self.github_id);
                 q.insert(SubmissionDummy {
-                    problem: q.select(problem),
                     solution: q.select(solution),
                     timestamp: q.select(UnixEpoch),
                     user: q.select(user),
