@@ -2,7 +2,7 @@ use rust_query::client::QueryBuilder;
 use rust_query::value::{UnixEpoch, Value};
 use wasmtime::{Config, Engine};
 
-use crate::tables::{ExecutionDummy, Instance};
+use crate::tables::{ExecutionDummy, FailureDummy, Instance};
 use crate::{
     hash::FileHash,
     solution::Solution,
@@ -39,6 +39,14 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
             // not executed yet
             q.filter(is_executed.not());
 
+            let fail = q.query(|q| {
+                let failure = q.table(tables::Failure);
+                q.filter_on(&failure.solution, &solution);
+                q.group().exists()
+            });
+            // has not failed
+            q.filter(fail.not());
+
             q.into_vec(u32::MAX, |row| QueuedTask {
                 solution_hash: row.get(solution.file_hash).into(),
                 problem_hash: row.get(instance.problem.file_hash).into(),
@@ -61,21 +69,34 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
 
             let conn = app.conn.lock();
 
-            conn.new_query(|q| {
-                let instance = q.table(Instance);
-                q.filter(instance.problem.file_hash.eq(i64::from(task.problem_hash)));
-                q.filter(instance.seed.eq(task.instance_seed));
-                let solution = q.table(tables::Solution);
-                q.filter(solution.file_hash.eq(i64::from(task.solution_hash)));
+            if run_result.answer == Some(instance.answer) {
+                conn.new_query(|q| {
+                    let instance = q.table(Instance);
+                    q.filter(instance.problem.file_hash.eq(i64::from(task.problem_hash)));
+                    q.filter(instance.seed.eq(task.instance_seed));
+                    let solution = q.table(tables::Solution);
+                    q.filter(solution.file_hash.eq(i64::from(task.solution_hash)));
 
-                q.insert(ExecutionDummy {
-                    answer: q.select(&run_result.answer),
-                    fuel_used: q.select(run_result.fuel_used as i64),
-                    instance: q.select(instance),
-                    solution: q.select(solution),
-                    timestamp: q.select(UnixEpoch),
+                    q.insert(ExecutionDummy {
+                        answer: q.select(&run_result.answer),
+                        fuel_used: q.select(run_result.fuel_used as i64),
+                        instance: q.select(instance),
+                        solution: q.select(solution),
+                        timestamp: q.select(UnixEpoch),
+                    });
                 });
-            });
+            } else {
+                conn.new_query(|q| {
+                    let solution = q.table(tables::Solution);
+                    q.filter(solution.file_hash.eq(i64::from(task.solution_hash)));
+
+                    q.insert(FailureDummy {
+                        seed: q.select(task.instance_seed),
+                        solution: q.select(solution),
+                        timestamp: q.select(UnixEpoch),
+                    })
+                })
+            }
         }
     }
 }
