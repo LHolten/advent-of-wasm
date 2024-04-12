@@ -2,7 +2,7 @@ use std::fs;
 
 use axum::{
     extract::{Multipart, Path, State},
-    http::{StatusCode, Uri},
+    http::StatusCode,
     response::Html,
 };
 use maud::html;
@@ -11,6 +11,7 @@ use rust_query::{client::QueryBuilder, value::Value};
 use crate::{
     db::InsertSubmission,
     hash::{self, FileHash},
+    pages::{header, Location, ProblemPage},
     solution::verify_wasm,
     tables, AppState, DUMMY_USER,
 };
@@ -59,12 +60,9 @@ pub async fn get_problem(
         })
         .await;
 
+    let location = Location::Problem(problem.clone(), ProblemPage::Home);
     let res = html! {
-        style { (include_str!("style.css")) }
-        p.test {
-            "The problem name is "
-            b {(problem)}
-        }
+        (header(location))
         table {
             // caption { "Scores" }
             thead {
@@ -82,13 +80,17 @@ pub async fn get_problem(
                 }
             }
         }
-        br;
-        form method="post" enctype="multipart/form-data" {
-            label { "wasm file: " }
-            input type="file" name="wasm";
-            br;
-            input type="submit";
-        }
+        // article {
+            // h2 {  }
+            form method="post" enctype="multipart/form-data" {
+                fieldset {
+                    legend { "Submit a new program" }
+                    aside { "Make sure to upload a " code {".wasm"} " file" }
+                    input type="file" name="wasm";
+                    button { "Submit!" };
+                }
+            }
+        // }
     };
     Ok(Html(res.into_string()))
 }

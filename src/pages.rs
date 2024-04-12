@@ -4,6 +4,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use maud::{html, Markup};
 use rusqlite::Connection;
 
 use crate::{async_sqlite::SharedConnection, bencher::bencher_main, problem::ProblemDir, AppState};
@@ -34,4 +35,37 @@ pub async fn web_server(problem_dir: Arc<ProblemDir>, conn: Connection) -> anyho
         .serve(app.into_make_service())
         .await?;
     Ok(())
+}
+
+enum Location {
+    Problem(String, ProblemPage),
+}
+
+enum ProblemPage {
+    Home,
+    Solution(String),
+}
+
+fn header(location: Location) -> Markup {
+    let Location::Problem(problem, page) = location;
+    html! {
+        head {
+            link rel="stylesheet" href="https://cdn.simplecss.org/simple.css";
+            // link rel="stylesheet" href="https://unpkg.com/chota";
+            // style { (include_str!("style.css")) }
+        }
+        header {
+            @match page {
+                ProblemPage::Home => {
+                    h1 { "Problem " mark{(problem)} }
+                }
+                ProblemPage::Solution(solution) => {
+                    nav {
+                        a href={"/problem/"(problem)} { (problem) };
+                    }
+                    h1 { "Solution " mark{(solution)} }
+                }
+            }
+        }
+    }
 }

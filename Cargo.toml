@@ -11,7 +11,7 @@ axum = { version = "0.6.1", features = ["macros", "multipart"] }
 base64 = "0.13.1"
 fehler = "1.0.0"
 k12 = "0.2.1"
-maud = "0.24.0"
+maud = "0.26.0"
 oauth2 = "4.3.0"
 rand = "0.8.5"
 rusqlite = { version = "0.30.0" }
@@ -21,7 +21,7 @@ tokio = { version = "1.23.0", features = ["full"] }
 toml = "0.5.10"
 wasmtime = { version = "4.0.0", default-features = false, features = ["cranelift"] }
 
-rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "212a4ea" }
+rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "0ca55ae" }
 
 [build-dependencies]
-rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "212a4ea" }
+rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "0ca55ae" }

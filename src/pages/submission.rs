@@ -6,7 +6,11 @@ use axum::{
 use maud::html;
 use rust_query::{client::QueryBuilder, value::Value};
 
-use crate::{hash::FileHash, tables, AppState};
+use crate::{
+    hash::FileHash,
+    pages::{header, Location, ProblemPage},
+    tables, AppState,
+};
 
 // information about a solution and its performance on a problem
 pub async fn submission(
@@ -54,16 +58,12 @@ pub async fn submission(
         })
         .await;
 
+    let location = Location::Problem(
+        problem.clone(),
+        ProblemPage::Solution(solution_hash.to_string()),
+    );
     let res = html! {
-        style { (include_str!("style.css")) }
-        p {
-            "The problem name is "
-            b {(problem)}
-        }
-        p {
-            "The solution hash is "
-            b {(solution_hash.to_string())}
-        }
+        (header(location))
         table {
             // caption { "Scores" }
             thead {
