@@ -59,7 +59,7 @@ pub async fn get_problem(
                     (group.max(exec.fuel_used), group.count_distinct(exec))
                 });
                 q.into_vec(u32::MAX, |row| SolutionStats {
-                    name: FileHash::from(row.get(solution.file_hash)).to_string(),
+                    name: FileHash::from(row.get(solution.program.file_hash)).to_string(),
                     max_fuel: if row.get(fail) {
                         "Failed".to_owned()
                     } else if row.get(count) == row.get(total_instances) {
@@ -131,7 +131,7 @@ pub async fn upload(
 
             let submission = InsertSubmission {
                 github_id: DUMMY_USER,
-                file_hash: hash,
+                program_hash: hash,
                 problem_hash: app.problem_dir.mapping[&file_name],
             };
 

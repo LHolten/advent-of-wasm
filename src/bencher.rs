@@ -48,7 +48,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
             q.filter(fail.not());
 
             q.into_vec(u32::MAX, |row| QueuedTask {
-                solution_hash: row.get(solution.file_hash).into(),
+                solution_hash: row.get(solution.program.file_hash).into(),
                 problem_hash: row.get(instance.problem.file_hash).into(),
                 instance_seed: row.get(instance.seed),
             })
@@ -74,8 +74,10 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                     let instance = q.table(Instance);
                     q.filter(instance.problem.file_hash.eq(i64::from(task.problem_hash)));
                     q.filter(instance.seed.eq(task.instance_seed));
+
                     let solution = q.table(tables::Solution);
-                    q.filter(solution.file_hash.eq(i64::from(task.solution_hash)));
+                    q.filter(solution.program.file_hash.eq(i64::from(task.solution_hash)));
+                    q.filter(solution.problem.file_hash.eq(i64::from(task.problem_hash)));
 
                     q.insert(ExecutionDummy {
                         answer: q.select(&run_result.answer),
@@ -88,7 +90,8 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
             } else {
                 conn.new_query(|q| {
                     let solution = q.table(tables::Solution);
-                    q.filter(solution.file_hash.eq(i64::from(task.solution_hash)));
+                    q.filter(solution.program.file_hash.eq(i64::from(task.solution_hash)));
+                    q.filter(solution.problem.file_hash.eq(i64::from(task.problem_hash)));
 
                     q.insert(FailureDummy {
                         seed: q.select(task.instance_seed),

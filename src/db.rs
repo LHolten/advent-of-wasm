@@ -22,7 +22,7 @@ impl ToSql for GithubId {
 #[must_use]
 pub struct InsertSubmission {
     pub github_id: GithubId,
-    pub file_hash: FileHash,
+    pub program_hash: FileHash,
     pub problem_hash: FileHash,
 }
 
@@ -30,16 +30,17 @@ impl InsertSubmission {
     pub async fn execute(self, conn: &SharedConnection) -> anyhow::Result<()> {
         conn.call(move |conn| -> rusqlite::Result<()> {
             conn.new_query(|q| {
-                let problem = get_problem(q, self.problem_hash);
+                let problem = get_file(q, self.problem_hash);
+                let program = get_file(q, self.program_hash);
                 q.insert(SolutionDummy {
-                    file_hash: q.select(i64::from(self.file_hash)),
                     timestamp: q.select(UnixEpoch),
+                    program: q.select(program),
                     problem: q.select(problem),
                     random_tests: q.select(0),
                 })
             });
             conn.new_query(|q| {
-                let solution = get_solution(q, self.file_hash);
+                let solution = get_file(q, self.program_hash);
                 let user = get_user(q, self.github_id);
                 q.insert(SubmissionDummy {
                     solution: q.select(solution),
@@ -54,16 +55,10 @@ impl InsertSubmission {
     }
 }
 
-pub fn get_problem<'t>(q: &mut Query<'_, 't>, has: FileHash) -> Db<'t, tables::Problem> {
-    let problem = q.table(tables::Problem);
-    q.filter(problem.file_hash.eq(i64::from(has)));
-    problem
-}
-
-pub fn get_solution<'t>(q: &mut Query<'_, 't>, hash: FileHash) -> Db<'t, tables::Solution> {
-    let solution = q.table(tables::Solution);
-    q.filter(solution.file_hash.eq(i64::from(hash)));
-    solution
+pub fn get_file<'t>(q: &mut Query<'_, 't>, hash: FileHash) -> Db<'t, tables::File> {
+    let file = q.table(tables::File);
+    q.filter(file.file_hash.eq(i64::from(hash)));
+    file
 }
 
 pub fn get_user<'t>(q: &mut Query<'_, 't>, github_id: GithubId) -> Db<'t, tables::User> {

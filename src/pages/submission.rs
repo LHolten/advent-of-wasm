@@ -38,11 +38,26 @@ pub async fn submission(
             conn.new_query(|q| {
                 let exec = q.table(tables::Execution);
                 q.filter(exec.instance.problem.file_hash.eq(i64::from(problem_hash)));
-                q.filter(exec.solution.file_hash.eq(i64::from(solution_hash)));
+                q.filter(exec.solution.program.file_hash.eq(i64::from(solution_hash)));
                 q.into_vec(u32::MAX, |row| SolutionStats {
                     seed: row.get(exec.instance.seed) as u64,
                     fuel: row.get(exec.fuel_used),
                 })
+            })
+        })
+        .await;
+
+    let failure = app
+        .conn
+        .call(move |conn| {
+            conn.new_query(|q| {
+                let failure = q.table(tables::Failure);
+                let solution = &failure.solution;
+                q.filter(solution.program.file_hash.eq(i64::from(solution_hash)));
+                q.filter(solution.problem.file_hash.eq(i64::from(problem_hash)));
+                q.into_vec(u32::MAX, |row| row.get(failure.seed))
+                    .first()
+                    .copied()
             })
         })
         .await;
@@ -53,6 +68,11 @@ pub async fn submission(
     );
     let res = html! {
         (header(location))
+        @if let Some(seed) = failure {
+            p class="notice" {
+                "Failed for seed " (seed as u64)
+            }
+        }
         table {
             // caption { "Scores" }
             thead {

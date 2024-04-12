@@ -1,6 +1,4 @@
--- integer primary keys do not need to be marked NOT NULL
--- REFERENCES on id should use 
-CREATE TABLE problem (
+CREATE TABLE file (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
     file_hash INTEGER NOT NULL UNIQUE
@@ -10,7 +8,7 @@ CREATE TABLE problem (
 CREATE TABLE instance (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    problem INTEGER NOT NULL REFERENCES problem,
+    problem INTEGER NOT NULL REFERENCES file,
     seed INTEGER NOT NULL,
     UNIQUE (problem, seed)
 ) STRICT;
@@ -19,12 +17,12 @@ CREATE TABLE instance (
 CREATE TABLE solution (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    file_hash INTEGER NOT NULL,
-    problem INTEGER NOT NULL REFERENCES problem,
+    program INTEGER NOT NULL REFERENCES file,
+    problem INTEGER NOT NULL REFERENCES file,
     -- how many random tests did this solution pass
     random_tests INTEGER NOT NULL,
-    -- solutions can only be submitted to a problem once
-    UNIQUE (file_hash, problem)
+    -- program can only be submitted to a problem once
+    UNIQUE (program, problem)
 ) STRICT;
 
 -- a random test "or benchmark test" failed
@@ -46,7 +44,7 @@ CREATE TABLE user (
 CREATE TABLE submission (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    solution INTEGER NOT NULL REFERENCES solution,
+    solution INTEGER NOT NULL REFERENCES file,
     user INTEGER NOT NULL REFERENCES user,
     UNIQUE (solution, user)
 ) STRICT;

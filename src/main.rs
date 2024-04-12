@@ -27,7 +27,7 @@ use rust_query::{
 };
 use tables::UserDummy;
 
-use crate::tables::{InstanceDummy, ProblemDummy};
+use crate::tables::{FileDummy, InstanceDummy};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
 
         conn.new_query(|q| {
             // on conflict do nothing
-            q.insert(ProblemDummy {
+            q.insert(FileDummy {
                 file_hash: q.select(i64::from(*file_hash)),
                 timestamp: q.select(UnixEpoch),
             })
@@ -70,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
             let seed = rng.next_u64() as i64;
 
             conn.new_query(|q| {
-                let problem = db::get_problem(q, *file_hash);
+                let problem = db::get_file(q, *file_hash);
                 q.insert(InstanceDummy {
                     problem: q.select(problem),
                     seed: q.select(seed),
