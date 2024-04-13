@@ -1,7 +1,8 @@
 CREATE TABLE file (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    file_hash INTEGER NOT NULL UNIQUE
+    file_hash INTEGER NOT NULL UNIQUE,
+    file_size INTEGER NOT NULL
 ) STRICT;
 
 -- a problem benchmark instance

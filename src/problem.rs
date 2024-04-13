@@ -63,6 +63,12 @@ impl ModulePath {
         let buf = fs::read(&self.0)?;
         FileHash::new(buf)
     }
+
+    #[throws(anyhow::Error)]
+    pub fn len(&self) -> usize {
+        let buf = fs::read(&self.0)?;
+        buf.len()
+    }
 }
 
 pub struct TaskInstance {

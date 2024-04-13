@@ -1,14 +1,12 @@
 use rusqlite::ToSql;
 use rust_query::{
-    client::QueryBuilder,
-    value::{Db, UnixEpoch, Value},
+    value::{Db, Value},
     Query,
 };
 
 use crate::{
-    async_sqlite::SharedConnection,
     hash::FileHash,
-    tables::{self, SolutionDummy, SubmissionDummy},
+    tables::{self},
 };
 
 pub struct GithubId(pub u64);
@@ -16,42 +14,6 @@ pub struct GithubId(pub u64);
 impl ToSql for GithubId {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         self.0.to_sql()
-    }
-}
-
-#[must_use]
-pub struct InsertSubmission {
-    pub github_id: GithubId,
-    pub program_hash: FileHash,
-    pub problem_hash: FileHash,
-}
-
-impl InsertSubmission {
-    pub async fn execute(self, conn: &SharedConnection) -> anyhow::Result<()> {
-        conn.call(move |conn| -> rusqlite::Result<()> {
-            conn.new_query(|q| {
-                let problem = get_file(q, self.problem_hash);
-                let program = get_file(q, self.program_hash);
-                q.insert(SolutionDummy {
-                    timestamp: q.select(UnixEpoch),
-                    program: q.select(program),
-                    problem: q.select(problem),
-                    random_tests: q.select(0),
-                })
-            });
-            conn.new_query(|q| {
-                let solution = get_file(q, self.program_hash);
-                let user = get_user(q, self.github_id);
-                q.insert(SubmissionDummy {
-                    solution: q.select(solution),
-                    timestamp: q.select(UnixEpoch),
-                    user: q.select(user),
-                })
-            });
-            Ok(())
-        })
-        .await?;
-        Ok(())
     }
 }
 

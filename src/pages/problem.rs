@@ -6,14 +6,18 @@ use axum::{
     response::Html,
 };
 use maud::html;
-use rust_query::{client::QueryBuilder, value::Value};
+use rust_query::{
+    client::QueryBuilder,
+    value::{UnixEpoch, Value},
+};
 
 use crate::{
-    db::InsertSubmission,
+    db::{get_file, get_user},
     hash::{self, FileHash},
     pages::{header, Location, ProblemPage},
     solution::verify_wasm,
-    tables, AppState, DUMMY_USER,
+    tables::{self, FileDummy, SolutionDummy, SubmissionDummy},
+    AppState, DUMMY_USER,
 };
 
 pub async fn get_problem(
@@ -32,6 +36,7 @@ pub async fn get_problem(
     struct SolutionStats {
         name: String,
         max_fuel: String,
+        file_size: u64,
     }
 
     let data = app
@@ -67,6 +72,7 @@ pub async fn get_problem(
                     } else {
                         format!("benched {} / {}", row.get(count), row.get(total_instances))
                     },
+                    file_size: row.get(solution.program.file_size) as u64,
                 })
             })
         })
@@ -80,6 +86,7 @@ pub async fn get_problem(
             thead {
                 tr {
                     th { "Solution" }
+                    th { "File Size" }
                     th { "Max Fuel" }
                 }
             }
@@ -87,6 +94,7 @@ pub async fn get_problem(
                 @for solution in &data {
                     tr {
                         td { a href={(problem)"/"(solution.name)} {(solution.name)} }
+                        td {(solution.file_size)}
                         td {(solution.max_fuel)}
                     }
                 }
@@ -119,26 +127,51 @@ pub async fn upload(
         let data = field.bytes().await.unwrap();
         let data_len = data.len();
 
+        println!("Length of `{name}` is {data_len} bytes");
+
         if &name == "wasm" {
             if let Err(e) = verify_wasm(&data) {
                 println!("user upload error: {}", e);
                 break;
             }
 
-            let hash = hash::FileHash::new(&data);
-            let path = format!("solution/{hash}.wasm");
+            let solution_hash = hash::FileHash::new(&data);
+            let path = format!("solution/{solution_hash}.wasm");
             fs::write(path, data).unwrap();
 
-            let submission = InsertSubmission {
-                github_id: DUMMY_USER,
-                program_hash: hash,
-                problem_hash: app.problem_dir.mapping[&file_name],
-            };
+            let problem_hash = app.problem_dir.mapping[&file_name];
 
-            submission.execute(&app.conn).await.unwrap();
+            app.conn
+                .call(move |conn| {
+                    conn.new_query(|q| {
+                        q.insert(FileDummy {
+                            file_hash: q.select(i64::from(solution_hash)),
+                            file_size: q.select(data_len as i64),
+                            timestamp: q.select(UnixEpoch),
+                        })
+                    });
+                    conn.new_query(|q| {
+                        let problem = get_file(q, problem_hash);
+                        let program = get_file(q, solution_hash);
+                        q.insert(SolutionDummy {
+                            timestamp: q.select(UnixEpoch),
+                            program: q.select(program),
+                            problem: q.select(problem),
+                            random_tests: q.select(0),
+                        })
+                    });
+                    conn.new_query(|q| {
+                        let solution = get_file(q, solution_hash);
+                        let user = get_user(q, DUMMY_USER);
+                        q.insert(SubmissionDummy {
+                            solution: q.select(solution),
+                            timestamp: q.select(UnixEpoch),
+                            user: q.select(user),
+                        })
+                    });
+                })
+                .await;
         }
-
-        println!("Length of `{name}` is {data_len} bytes");
     }
 
     get_problem(State(app), Path(file_name)).await
