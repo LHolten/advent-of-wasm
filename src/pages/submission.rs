@@ -62,6 +62,21 @@ pub async fn submission(
         })
         .await;
 
+    let users = app
+        .conn
+        .call(move |conn| {
+            conn.new_query(|q| {
+                let submission = q.table(tables::Submission);
+                q.filter(submission.solution.file_hash.eq(i64::from(solution_hash)));
+                q.into_vec(u32::MAX, |row| {
+                    // sort by timestamp
+                    let _ = row.get(submission.timestamp);
+                    row.get(submission.user.github_id)
+                })
+            })
+        })
+        .await;
+
     let location = Location::Problem(
         problem.clone(),
         ProblemPage::Solution(solution_hash.to_string()),
@@ -72,6 +87,9 @@ pub async fn submission(
             p class="notice" {
                 "Failed for seed " (seed as u64)
             }
+        }
+        p {
+            "Discovered by " (users[0])
         }
         table {
             // caption { "Scores" }

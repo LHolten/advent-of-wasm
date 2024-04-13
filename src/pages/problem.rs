@@ -64,6 +64,7 @@ pub async fn get_problem(
                     (group.max(exec.fuel_used), group.count_distinct(exec))
                 });
                 q.into_vec(u32::MAX, |row| SolutionStats {
+                    file_size: row.get(solution.program.file_size) as u64,
                     name: FileHash::from(row.get(solution.program.file_hash)).to_string(),
                     max_fuel: if row.get(fail) {
                         "Failed".to_owned()
@@ -72,7 +73,6 @@ pub async fn get_problem(
                     } else {
                         format!("benched {} / {}", row.get(count), row.get(total_instances))
                     },
-                    file_size: row.get(solution.program.file_size) as u64,
                 })
             })
         })
@@ -93,7 +93,7 @@ pub async fn get_problem(
             tbody {
                 @for solution in &data {
                     tr {
-                        td { a href={(problem)"/"(solution.name)} {(solution.name)} }
+                        td { a href={(problem)"/"(solution.name)} { code{(solution.name)}} }
                         td {(solution.file_size)}
                         td {(solution.max_fuel)}
                     }
