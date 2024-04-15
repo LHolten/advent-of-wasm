@@ -53,6 +53,9 @@ fn header(location: Location) -> Markup {
             link rel="stylesheet" href="https://cdn.simplecss.org/simple.css";
             // link rel="stylesheet" href="https://unpkg.com/chota";
             // style { (include_str!("style.css")) }
+
+            script src="https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.js" {}
+            script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.js" {}
         }
         header {
             @match page {

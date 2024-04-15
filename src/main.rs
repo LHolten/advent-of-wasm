@@ -8,6 +8,7 @@ use rusqlite::Connection;
 
 mod async_sqlite;
 mod bencher;
+mod chart;
 mod db;
 mod hash;
 mod migration;

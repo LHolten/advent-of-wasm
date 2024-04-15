@@ -67,7 +67,7 @@ pub fn verify_wasm(buf: &[u8]) {
     let mtype = module
         .get_export("memory")
         .context("expect export `memory`")?;
-    if mtype.memory() != Some(&MemoryType::new(16, None)) {
+    if mtype.memory().is_none() {
         anyhow::bail!("export `memory` is not a memory");
     }
     let btype = module

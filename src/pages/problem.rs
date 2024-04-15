@@ -5,13 +5,14 @@ use axum::{
     http::StatusCode,
     response::Html,
 };
-use maud::html;
+use maud::{html, PreEscaped};
 use rust_query::{
     client::QueryBuilder,
     value::{UnixEpoch, Value},
 };
 
 use crate::{
+    chart::{AreaStyle, Axis, Grid, Root, Series, Title, Tooltip},
     db::{get_file, get_user},
     hash::{self, FileHash},
     pages::{header, Location, ProblemPage},
@@ -19,6 +20,12 @@ use crate::{
     tables::{self, FileDummy, SolutionDummy, SubmissionDummy},
     AppState, DUMMY_USER,
 };
+
+struct SolutionStats {
+    name: String,
+    max_fuel: String,
+    file_size: u64,
+}
 
 pub async fn get_problem(
     State(app): State<AppState>,
@@ -32,12 +39,6 @@ pub async fn get_problem(
         .mapping
         .get(&problem)
         .ok_or(StatusCode::NOT_FOUND)?;
-
-    struct SolutionStats {
-        name: String,
-        max_fuel: String,
-        file_size: u64,
-    }
 
     let data = app
         .conn
@@ -78,6 +79,19 @@ pub async fn get_problem(
         })
         .await;
 
+    let chart_data = graph(&data);
+
+    let js = format!(
+        "
+var chart = echarts.init(document.getElementById('chart'), null, {{ renderer: 'canvas' }});
+chart.setOption({});
+window.addEventListener('resize', function() {{
+  chart.resize();
+}});
+    ",
+        serde_json::to_string(&chart_data).unwrap()
+    );
+
     let location = Location::Problem(problem.clone(), ProblemPage::Home);
     let res = html! {
         (header(location))
@@ -100,19 +114,111 @@ pub async fn get_problem(
                 }
             }
         }
-        // article {
-            // h2 {  }
-            form method="post" enctype="multipart/form-data" {
-                fieldset {
-                    legend { "Submit a new program" }
-                    aside { "Make sure to upload a " code {".wasm"} " file" }
-                    input type="file" name="wasm";
-                    button { "Submit!" };
-                }
+
+        div id="chart" style="height: 500px" {}
+        script type="text/javascript" {(PreEscaped(js))}
+
+        form method="post" enctype="multipart/form-data" {
+            fieldset {
+                legend { "Submit a new program" }
+                aside { "Make sure to upload a " code {".wasm"} " file" }
+                input type="file" name="wasm";
+                button { "Submit!" };
             }
-        // }
+        }
     };
     Ok(Html(res.into_string()))
+}
+
+fn graph(data: &[SolutionStats]) -> Root {
+    struct Data {
+        file_size: u64,
+        max_fuel: u64,
+    }
+    let data: Vec<_> = data
+        .iter()
+        .filter_map(|sol| {
+            Some(Data {
+                file_size: sol.file_size,
+                max_fuel: sol.max_fuel.parse().ok()?,
+            })
+        })
+        .collect();
+    // data is sorted by file size
+    let mut pareto: Vec<_> = data
+        .iter()
+        .enumerate()
+        .filter(|(i, sol)| {
+            // check that all smaller solutions are slower
+            data.iter().take(*i).all(|x| x.max_fuel > sol.max_fuel)
+        })
+        .map(|(_i, data)| [data.file_size, data.max_fuel])
+        .collect();
+
+    const MAX: u64 = 501;
+    let min_size = pareto.iter().map(|d| d[0]).min().unwrap_or(MAX);
+    let min_fuel = pareto.iter().map(|d| d[1]).min().unwrap_or(MAX);
+    pareto.insert(0, [min_size, MAX]);
+    pareto.push([MAX, min_fuel]);
+
+    // let chart_data = data
+    //     .iter()
+    //     .filter_map(|sol| Some([sol.file_size, sol.max_fuel.parse().ok()?]))
+    //     .collect();
+
+    // let pointer = AxisPointer {
+    //     show: true,
+    //     r#type: "cross".to_owned(),
+    //     snap: true,
+    //     label: Label {
+    //         precision: "0".to_string(),
+    //     },
+    // };
+    Root {
+        title: Title {
+            text: "Pareto Front".to_owned(),
+        },
+        tooltip: Tooltip {
+            // axis_pointer: pointer,
+            formatter: "size,fuel = {c}".to_owned(),
+        },
+        grid: Grid {
+            contain_label: false,
+        },
+        x_axis: Axis {
+            r#type: "log".to_owned(),
+            name: "File Size".to_owned(),
+            max: 500,
+            min: min_size,
+            // axis_pointer: pointer.clone(),
+            // data: pareto.iter().map(|d| d[0]).collect(),
+        },
+        y_axis: Axis {
+            r#type: "log".to_owned(),
+            name: "Max Fuel".to_owned(),
+            max: 500,
+            min: min_fuel,
+            // axis_pointer: pointer,
+            // data: pareto.iter().map(|d| d[1]).collect(),
+        },
+        series: vec![
+            Series::Scatter {
+                data: data.iter().map(|d| [d.file_size, d.max_fuel]).collect(),
+                // tooltip: Tooltip {
+                //     // axis_pointer: pointer,
+                //     formatter: "size,fuel = {c}".to_owned(),
+                // },
+            },
+            Series::Line {
+                step: "end".to_owned(),
+                data: pareto,
+                area_style: AreaStyle {
+                    opacity: 0.2,
+                    origin: "end".to_owned(),
+                },
+            },
+        ],
+    }
 }
 
 pub async fn upload(
