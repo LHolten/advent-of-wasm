@@ -22,8 +22,8 @@
           src = ./.;
         };
 
-        nixosModules.default = {
-          config.systemd.services.hello = {
+        nixosModules.default = { ... }: {
+          config.systemd.services.advent-of-wasm = {
             wantedBy = [ "multi-user.target" ];
             serviceConfig.ExecStart = "${defaultPackage}/advent-of-wasm";
           };
