@@ -25,7 +25,7 @@
         nixosModules.default = { ... }: {
           config.systemd.services.advent-of-wasm = {
             wantedBy = [ "multi-user.target" ];
-            serviceConfig.ExecStart = "${defaultPackage}/advent-of-wasm";
+            serviceConfig.ExecStart = "${defaultPackage}/bin/advent-of-wasm";
           };
         };
 
