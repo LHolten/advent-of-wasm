@@ -3,7 +3,7 @@ use std::fs;
 use axum::{
     extract::{Multipart, Path, State},
     http::StatusCode,
-    response::Html,
+    response::{Html, Redirect},
 };
 use maud::{html, PreEscaped};
 use rust_query::{
@@ -212,10 +212,10 @@ fn graph(data: &[SolutionStats]) -> Root {
             Series::Line {
                 step: "end".to_owned(),
                 data: pareto,
-                area_style: AreaStyle {
-                    opacity: 0.2,
-                    origin: "end".to_owned(),
-                },
+                // area_style: AreaStyle {
+                //     opacity: 0.2,
+                //     origin: "end".to_owned(),
+                // },
             },
         ],
     }
@@ -225,7 +225,7 @@ pub async fn upload(
     State(app): State<AppState>,
     Path(file_name): Path<String>,
     mut multipart: Multipart,
-) -> Result<Html<String>, StatusCode> {
+) -> Result<Redirect, StatusCode> {
     println!("got multipart");
 
     while let Some(field) = multipart.next_field().await.unwrap() {
@@ -280,5 +280,5 @@ pub async fn upload(
         }
     }
 
-    get_problem(State(app), Path(file_name)).await
+    Ok(Redirect::to(""))
 }

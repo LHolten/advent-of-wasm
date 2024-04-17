@@ -1,7 +1,7 @@
 use anyhow::Context;
 use fehler::throws;
 use wasmtime::{
-    Engine, FuncType, GlobalType, Linker, MemoryType, Module, Mutability, Store, TypedFunc, ValType,
+    Engine, FuncType, GlobalType, Linker, Module, Mutability, Store, TypedFunc, ValType,
 };
 
 use crate::{hash::FileHash, problem::ModulePath};

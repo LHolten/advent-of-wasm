@@ -76,7 +76,7 @@ pub enum Series {
     Line {
         step: String,
         data: Vec<[u64; 2]>,
-        area_style: AreaStyle,
+        // area_style: AreaStyle,
     },
     Scatter {
         data: Vec<[u64; 2]>,

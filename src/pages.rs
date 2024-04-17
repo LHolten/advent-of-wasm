@@ -14,6 +14,7 @@ use self::{
     submission::submission,
 };
 
+mod login;
 mod problem;
 mod submission;
 
@@ -26,14 +27,15 @@ pub async fn web_server(problem_dir: Arc<ProblemDir>, conn: Connection) -> anyho
         .route("/problem/:problem", get(get_problem))
         .route("/problem/:problem", post(upload))
         .route("/problem/:problem/:solution_hash", get(submission))
+        .route("/login", get(login::login))
+        .route("/redirect", get(login::redirect))
         .with_state(app_state.clone());
 
     // start the bencher
     thread::spawn(|| bencher_main(app_state).unwrap());
     // run out app with hyper on localhost:3000
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
-        .serve(app.into_make_service())
-        .await?;
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    axum::serve(listener, app).await?;
     Ok(())
 }
 
@@ -69,6 +71,7 @@ fn header(location: Location) -> Markup {
                     h1 { "Solution " mark{(solution)} }
                 }
             }
+            // a href=""
         }
     }
 }

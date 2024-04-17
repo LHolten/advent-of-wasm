@@ -7,12 +7,13 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.68"
-axum = { version = "0.6.1", features = ["macros", "multipart"] }
+axum = { version = "0.7", features = ["macros", "multipart"] }
+axum-extra = { version = "0.9.3", features = ["cookie"] }
 base64 = "0.13.1"
 fehler = "1.0.0"
 k12 = "0.2.1"
 maud = "0.26.0"
-oauth2 = "4.3.0"
+oauth2 = "4.4.2"
 rand = "0.8.5"
 rusqlite = { version = "0.30.0" }
 rusqlite_migration = "1.0.1"
