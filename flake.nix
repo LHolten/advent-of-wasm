@@ -27,11 +27,9 @@
             wantedBy = [ "multi-user.target" ];
             serviceConfig.ExecStart = "${defaultPackage}/bin/advent-of-wasm";
             serviceConfig.WorkingDirectory = "/var/lib/advent-of-wasm";
+            serviceConfig.StateDirectory = "/var/lib/advent-of-wasm";
           };
-          config.users.users.advent-of-wasm = {
-            # this might make the folder :D
-            home = "/var/lib/advent-of-wasm";
-          };
+          config.users.users.advent-of-wasm = {};
         };
 
         # For `nix develop`:
