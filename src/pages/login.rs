@@ -48,9 +48,6 @@ fn make_client() -> BasicClient {
         auth_url,
         Some(token_url),
     )
-    // This example will be running its own server at localhost:8080.
-    // See below for the server implementation.
-    .set_redirect_uri(RedirectUrl::new("http://localhost:3000/redirect".to_string()).unwrap())
 }
 
 pub async fn redirect(
