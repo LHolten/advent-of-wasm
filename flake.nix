@@ -17,7 +17,16 @@
       in rec {
         # For `nix build` & `nix run`:
         defaultPackage = naersk'.buildPackage {
+          nativeBuildInputs = with pkgs; [ pkg-config rustPlatform.bindgenHook ];
+          buildInputs = with pkgs; [ openssl sqlite ];
           src = ./.;
+        };
+
+        nixosModules.default = {
+          config.systemd.services.hello = {
+            wantedBy = [ "multi-user.target" ];
+            serviceConfig.ExecStart = "${defaultPackage}/advent-of-wasm";
+          };
         };
 
         # For `nix develop`:

@@ -10,6 +10,6 @@ fn main() {
     let code = generate(client);
     fs::write(dest_path, code).unwrap();
 
-    println!("cargo::rerun-if-changed=src/migration/000_initial.sql");
-    println!("cargo::rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=src/migration/000_initial.sql");
+    println!("cargo:rerun-if-changed=build.rs");
 }
