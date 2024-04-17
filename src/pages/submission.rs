@@ -71,7 +71,7 @@ pub async fn submission(
                 q.into_vec(u32::MAX, |row| {
                     // sort by timestamp
                     let _ = row.get(submission.timestamp);
-                    row.get(submission.user.github_id)
+                    row.get(submission.user.github_login)
                 })
             })
         })
@@ -89,7 +89,7 @@ pub async fn submission(
             }
         }
         p {
-            "Discovered by " (users[0])
+            "Discovered by " (users.join(", "))
         }
         table {
             // caption { "Scores" }
