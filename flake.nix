@@ -25,9 +25,13 @@
         nixosModules.default = { ... }: {
           systemd.services.advent-of-wasm = {
             wantedBy = [ "multi-user.target" ];
-            serviceConfig.ExecStart = "${defaultPackage}/bin/advent-of-wasm";
-            serviceConfig.WorkingDirectory = "/var/lib/advent-of-wasm";
-            serviceConfig.StateDirectory = "/var/lib/advent-of-wasm";
+            serviceConfig = {
+              ExecStart = "${defaultPackage}/bin/advent-of-wasm";
+              User = "advent-of-wasm";
+              Group = "advent-of-wasm";
+              WorkingDirectory = "/var/lib/advent-of-wasm";
+              StateDirectory = "/var/lib/advent-of-wasm";
+            };
           };
           
           users.users.advent-of-wasm = {
