@@ -5,6 +5,7 @@ use axum::{
     http::StatusCode,
     response::{Html, Redirect},
 };
+use axum_extra::extract::CookieJar;
 use maud::{html, PreEscaped};
 use rust_query::{
     client::QueryBuilder,
@@ -12,13 +13,13 @@ use rust_query::{
 };
 
 use crate::{
-    chart::{AreaStyle, Axis, Grid, Root, Series, Title, Tooltip},
-    db::{get_file, get_user},
+    chart::{Axis, Grid, Root, Series, Title, Tooltip},
+    db::{get_file, get_user, GithubId},
     hash::{self, FileHash},
     pages::{header, Location, ProblemPage},
     solution::verify_wasm,
-    tables::{self, FileDummy, SolutionDummy, SubmissionDummy},
-    AppState, DUMMY_USER,
+    tables::{self, FileDummy, SolutionDummy, SubmissionDummy, UserDummy},
+    AppState,
 };
 
 struct SolutionStats {
@@ -224,11 +225,35 @@ fn graph(data: &[SolutionStats]) -> Root {
 pub async fn upload(
     State(app): State<AppState>,
     Path(file_name): Path<String>,
+    jar: CookieJar,
     mut multipart: Multipart,
-) -> Result<Redirect, StatusCode> {
+) -> Result<Redirect, String> {
     println!("got multipart");
 
+    let access_token = jar.get("access_token").ok_or("not loged in")?;
+    let response = reqwest::Client::builder()
+        .user_agent("wasm-bench")
+        .build()
+        .unwrap()
+        .get("https://api.github.com/user")
+        .bearer_auth(access_token.value())
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|_| "error connecting to github")?
+        .error_for_status()
+        .map_err(|_| "could not get github info, try loging in again")?;
+    let text = response.text().await.map_err(|_| "github response error")?;
+    println!("{}", text);
+
+    let val: serde_json::Value = serde_json::from_str(&text).unwrap();
+
     while let Some(field) = multipart.next_field().await.unwrap() {
+        let github_id = val.get("id").unwrap().as_i64().unwrap();
+        let github_id = GithubId(github_id);
+        let github_login = val.get("login").unwrap().as_str().unwrap().to_owned();
+
         let name = field.name().unwrap().to_string();
         let data = field.bytes().await.unwrap();
         let data_len = data.len();
@@ -250,6 +275,13 @@ pub async fn upload(
             app.conn
                 .call(move |conn| {
                     conn.new_query(|q| {
+                        q.insert(UserDummy {
+                            github_id: q.select(github_id.0),
+                            github_login: q.select(github_login.as_str()),
+                            timestamp: q.select(UnixEpoch),
+                        })
+                    });
+                    conn.new_query(|q| {
                         q.insert(FileDummy {
                             file_hash: q.select(i64::from(solution_hash)),
                             file_size: q.select(data_len as i64),
@@ -268,7 +300,7 @@ pub async fn upload(
                     });
                     conn.new_query(|q| {
                         let solution = get_file(q, solution_hash);
-                        let user = get_user(q, DUMMY_USER);
+                        let user = get_user(q, github_id);
                         q.insert(SubmissionDummy {
                             solution: q.select(solution),
                             timestamp: q.select(UnixEpoch),

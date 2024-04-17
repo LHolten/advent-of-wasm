@@ -25,6 +25,7 @@ toml = "0.5.10"
 wasmtime = { version = "4.0.0", default-features = false, features = ["cranelift"] }
 
 rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "d5be34a" }
+reqwest = "0.12.3"
 
 [build-dependencies]
 rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "d5be34a" }

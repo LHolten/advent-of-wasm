@@ -38,7 +38,8 @@ CREATE TABLE failure (
 CREATE TABLE user (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
-    github_id INTEGER NOT NULL UNIQUE
+    github_id INTEGER NOT NULL UNIQUE,
+    github_login TEXT NOT NULL
 ) STRICT;
 
 -- who uploaded the solution

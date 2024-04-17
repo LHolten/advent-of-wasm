@@ -9,7 +9,8 @@ use crate::{
     tables::{self},
 };
 
-pub struct GithubId(pub u64);
+#[derive(Clone, Copy)]
+pub struct GithubId(pub i64);
 
 impl ToSql for GithubId {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
@@ -25,6 +26,6 @@ pub fn get_file<'t>(q: &mut Query<'_, 't>, hash: FileHash) -> Db<'t, tables::Fil
 
 pub fn get_user<'t>(q: &mut Query<'_, 't>, github_id: GithubId) -> Db<'t, tables::User> {
     let user = q.table(tables::User);
-    q.filter(user.github_id.eq(github_id.0 as i64));
+    q.filter(user.github_id.eq(github_id.0));
     user
 }

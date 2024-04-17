@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use db::GithubId;
 use pages::web_server;
 use problem::ProblemDir;
 use rand::{thread_rng, RngCore};
@@ -26,7 +25,6 @@ use rust_query::{
     client::QueryBuilder,
     value::{UnixEpoch, Value},
 };
-use tables::UserDummy;
 
 use crate::tables::{FileDummy, InstanceDummy};
 
@@ -35,8 +33,6 @@ pub struct AppState {
     problem_dir: Arc<ProblemDir>,
     conn: SharedConnection,
 }
-
-const DUMMY_USER: GithubId = GithubId(1337);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -81,13 +77,6 @@ async fn main() -> anyhow::Result<()> {
             });
         }
     }
-
-    conn.new_query(|q| {
-        q.insert(UserDummy {
-            github_id: q.select(DUMMY_USER.0 as i64),
-            timestamp: q.select(UnixEpoch),
-        })
-    });
 
     web_server(problem_dir, conn).await
 }

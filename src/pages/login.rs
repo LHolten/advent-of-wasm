@@ -5,6 +5,7 @@ use axum::http::StatusCode;
 use axum::response::Redirect;
 use axum_extra::extract::{cookie::Cookie, CookieJar};
 use oauth2::reqwest::async_http_client;
+use oauth2::TokenResponse;
 use oauth2::{
     basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl,
     TokenUrl,
@@ -70,8 +71,8 @@ pub async fn redirect(
     println!("Github returned the following token:\n{:?}\n", token_res);
 
     if let Ok(token) = token_res {
-        let token_str = serde_json::to_string(&token).unwrap();
-        jar = jar.add(Cookie::new("access_token", token_str));
+        let token_str = token.access_token().secret();
+        jar = jar.add(Cookie::new("access_token", token_str.to_owned()));
         jar = jar.remove(Cookie::from("state"));
     }
     Ok((jar, Redirect::to("/me")))
