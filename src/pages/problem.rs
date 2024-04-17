@@ -243,7 +243,7 @@ async fn inner_upload(
 ) -> Result<FileHash, String> {
     println!("got multipart");
 
-    let access_token = jar.get("access_token").ok_or("not loged in")?;
+    let access_token = jar.get("access_token").ok_or("not logged in")?;
     let response = reqwest::Client::builder()
         .user_agent("wasm-bench")
         .build()

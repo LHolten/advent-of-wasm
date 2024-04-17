@@ -36,8 +36,8 @@ impl Solution {
 
         let func: TypedFunc<i32, i64> = instance.get_typed_func(&mut store, "solve").unwrap();
 
-        memory.grow(&mut store, 1).unwrap();
-        memory.write(&mut store, heap_base as usize, data).unwrap();
+        drop(memory.grow(&mut store, 1));
+        drop(memory.write(&mut store, heap_base as usize, data));
 
         // call the actual solve function
         let answer = func
