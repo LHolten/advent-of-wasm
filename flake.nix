@@ -23,13 +23,18 @@
         };
 
         nixosModules.default = { ... }: {
-          config.systemd.services.advent-of-wasm = {
+          systemd.services.advent-of-wasm = {
             wantedBy = [ "multi-user.target" ];
             serviceConfig.ExecStart = "${defaultPackage}/bin/advent-of-wasm";
             serviceConfig.WorkingDirectory = "/var/lib/advent-of-wasm";
             serviceConfig.StateDirectory = "/var/lib/advent-of-wasm";
           };
-          config.users.users.advent-of-wasm = {};
+          
+          users.users.advent-of-wasm = {
+            isSystemUser = true;
+            group = "advent-of-wasm";
+          };
+          users.groups.advent-of-wasm = {};
         };
 
         # For `nix develop`:
