@@ -1,4 +1,3 @@
-use anyhow::Context;
 use fehler::{throw, throws};
 use wasmtime::{
     Engine, FuncType, GlobalType, Linker, Module, Mutability, Store, TypedFunc, ValType,

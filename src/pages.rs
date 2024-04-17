@@ -52,7 +52,7 @@ enum ProblemPage {
 fn header(location: Location, jar: &CookieJar) -> Markup {
     let login = match jar.get("access_token") {
         Some(_) => html! {
-            "loged in"
+            "logged in"
         },
         None => html! {
             a href="/login" { "login!" };

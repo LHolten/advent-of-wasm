@@ -256,7 +256,7 @@ async fn inner_upload(
         .await
         .map_err(|_| "error connecting to github")?
         .error_for_status()
-        .map_err(|_| "could not get github info, try loging in again")?;
+        .map_err(|_| "could not get github info, try logging in again")?;
     let text = response.text().await.map_err(|_| "github response error")?;
     println!("{}", text);
 
