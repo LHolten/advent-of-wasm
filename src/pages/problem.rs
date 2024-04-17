@@ -31,6 +31,7 @@ struct SolutionStats {
 pub async fn get_problem(
     State(app): State<AppState>,
     Path(problem): Path<String>,
+    jar: CookieJar,
     // uri: Uri,
 ) -> Result<Html<String>, StatusCode> {
     println!("got user for {problem}");
@@ -95,7 +96,7 @@ window.addEventListener('resize', function() {{
 
     let location = Location::Problem(problem.clone(), ProblemPage::Home);
     let res = html! {
-        (header(location))
+        (header(location, &jar))
         table {
             // caption { "Scores" }
             thead {
@@ -226,8 +227,20 @@ pub async fn upload(
     State(app): State<AppState>,
     Path(file_name): Path<String>,
     jar: CookieJar,
-    mut multipart: Multipart,
+    multipart: Multipart,
 ) -> Result<Redirect, String> {
+    match inner_upload(app, &file_name, jar, multipart).await {
+        Ok(file) => Ok(Redirect::to(&format!("/{file_name}/{file}"))),
+        Err(err) => Err(err),
+    }
+}
+
+async fn inner_upload(
+    app: AppState,
+    file_name: &str,
+    jar: CookieJar,
+    mut multipart: Multipart,
+) -> Result<FileHash, String> {
     println!("got multipart");
 
     let access_token = jar.get("access_token").ok_or("not loged in")?;
@@ -248,69 +261,63 @@ pub async fn upload(
     println!("{}", text);
 
     let val: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let github_id = val.get("id").unwrap().as_i64().unwrap();
+    let github_id = GithubId(github_id);
+    let github_login = val.get("login").unwrap().as_str().unwrap().to_owned();
 
-    while let Some(field) = multipart.next_field().await.unwrap() {
-        let github_id = val.get("id").unwrap().as_i64().unwrap();
-        let github_id = GithubId(github_id);
-        let github_login = val.get("login").unwrap().as_str().unwrap().to_owned();
+    let field = multipart.next_field().await.unwrap().unwrap();
+    assert_eq!(field.name().unwrap(), "wasm");
 
-        let name = field.name().unwrap().to_string();
-        let data = field.bytes().await.unwrap();
-        let data_len = data.len();
+    let data = field.bytes().await.unwrap();
+    let data_len = data.len();
 
-        println!("Length of `{name}` is {data_len} bytes");
+    println!("Got {data_len} byte wasm file");
 
-        if &name == "wasm" {
-            if let Err(e) = verify_wasm(&data) {
-                println!("user upload error: {}", e);
-                break;
-            }
+    verify_wasm(&data)?;
 
-            let solution_hash = hash::FileHash::new(&data);
-            let path = format!("solution/{solution_hash}.wasm");
-            fs::write(path, data).unwrap();
+    let solution_hash = hash::FileHash::new(&data);
+    let path = format!("solution/{solution_hash}.wasm");
+    fs::write(path, data).unwrap();
 
-            let problem_hash = app.problem_dir.mapping[&file_name];
+    let problem_hash = app.problem_dir.mapping[file_name];
 
-            app.conn
-                .call(move |conn| {
-                    conn.new_query(|q| {
-                        q.insert(UserDummy {
-                            github_id: q.select(github_id.0),
-                            github_login: q.select(github_login.as_str()),
-                            timestamp: q.select(UnixEpoch),
-                        })
-                    });
-                    conn.new_query(|q| {
-                        q.insert(FileDummy {
-                            file_hash: q.select(i64::from(solution_hash)),
-                            file_size: q.select(data_len as i64),
-                            timestamp: q.select(UnixEpoch),
-                        })
-                    });
-                    conn.new_query(|q| {
-                        let problem = get_file(q, problem_hash);
-                        let program = get_file(q, solution_hash);
-                        q.insert(SolutionDummy {
-                            timestamp: q.select(UnixEpoch),
-                            program: q.select(program),
-                            problem: q.select(problem),
-                            random_tests: q.select(0),
-                        })
-                    });
-                    conn.new_query(|q| {
-                        let solution = get_file(q, solution_hash);
-                        let user = get_user(q, github_id);
-                        q.insert(SubmissionDummy {
-                            solution: q.select(solution),
-                            timestamp: q.select(UnixEpoch),
-                            user: q.select(user),
-                        })
-                    });
+    app.conn
+        .call(move |conn| {
+            conn.new_query(|q| {
+                q.insert(UserDummy {
+                    github_id: q.select(github_id.0),
+                    github_login: q.select(github_login.as_str()),
+                    timestamp: q.select(UnixEpoch),
                 })
-                .await;
-        }
-    }
+            });
+            conn.new_query(|q| {
+                q.insert(FileDummy {
+                    file_hash: q.select(i64::from(solution_hash)),
+                    file_size: q.select(data_len as i64),
+                    timestamp: q.select(UnixEpoch),
+                })
+            });
+            conn.new_query(|q| {
+                let problem = get_file(q, problem_hash);
+                let program = get_file(q, solution_hash);
+                q.insert(SolutionDummy {
+                    timestamp: q.select(UnixEpoch),
+                    program: q.select(program),
+                    problem: q.select(problem),
+                    random_tests: q.select(0),
+                })
+            });
+            conn.new_query(|q| {
+                let solution = get_file(q, solution_hash);
+                let user = get_user(q, github_id);
+                q.insert(SubmissionDummy {
+                    solution: q.select(solution),
+                    timestamp: q.select(UnixEpoch),
+                    user: q.select(user),
+                })
+            });
+        })
+        .await;
 
-    Ok(Redirect::to(""))
+    Ok(solution_hash)
 }

@@ -75,7 +75,7 @@ pub async fn redirect(
         jar = jar.add(Cookie::new("access_token", token_str.to_owned()));
         jar = jar.remove(Cookie::from("state"));
     }
-    Ok((jar, Redirect::to("/me")))
+    Ok((jar, Redirect::to("/problem/parse")))
 }
 
 pub async fn login(mut jar: CookieJar) -> Result<(CookieJar, Redirect), StatusCode> {

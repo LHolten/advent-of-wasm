@@ -1,5 +1,5 @@
 use anyhow::Context;
-use fehler::throws;
+use fehler::{throw, throws};
 use wasmtime::{
     Engine, FuncType, GlobalType, Linker, Module, Mutability, Store, TypedFunc, ValType,
 };
@@ -53,31 +53,31 @@ impl Solution {
     }
 }
 
-#[throws(anyhow::Error)]
+#[throws(String)]
 pub fn verify_wasm(buf: &[u8]) {
     let engine = Engine::default();
-    let module = Module::from_binary(&engine, buf)?;
+    let module = Module::from_binary(&engine, buf).map_err(|e| e.to_string())?;
 
     let ftype = module
         .get_export("solve")
-        .context("expect export `solve`")?;
+        .ok_or("there is no export `solve`")?;
     if ftype.func() != Some(&FuncType::new([ValType::I32], [ValType::I64])) {
-        anyhow::bail!("export `solve` does not have signature i32 -> i64");
+        throw!("export `solve` does not have signature i32 -> i64");
     }
     let mtype = module
         .get_export("memory")
-        .context("expect export `memory`")?;
+        .ok_or("there is no export `memory`")?;
     if mtype.memory().is_none() {
-        anyhow::bail!("export `memory` is not a memory");
+        throw!("export `memory` is not a memory");
     }
     let btype = module
         .get_export("__heap_base")
-        .context("expect export `__heap_base`")?;
+        .ok_or("there is no export `__heap_base`")?;
     if btype.global() != Some(&GlobalType::new(ValType::I32, Mutability::Const)) {
-        anyhow::bail!("export `__heap_base` is not a global const i32");
+        throw!("export `__heap_base` is not a global const i32");
     }
 
     if module.imports().len() != 0 {
-        anyhow::bail!("expected no imports");
+        throw!("expected no imports");
     }
 }

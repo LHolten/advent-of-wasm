@@ -4,6 +4,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use axum_extra::extract::CookieJar;
 use maud::{html, Markup};
 use rusqlite::Connection;
 
@@ -48,7 +49,16 @@ enum ProblemPage {
     Solution(String),
 }
 
-fn header(location: Location) -> Markup {
+fn header(location: Location, jar: &CookieJar) -> Markup {
+    let login = match jar.get("access_token") {
+        Some(_) => html! {
+            "loged in"
+        },
+        None => html! {
+            a href="/login" { "login!" };
+        },
+    };
+
     let Location::Problem(problem, page) = location;
     html! {
         head {
@@ -62,11 +72,13 @@ fn header(location: Location) -> Markup {
         header {
             @match page {
                 ProblemPage::Home => {
+                    nav {(login)}
                     h1 { "Problem " mark{(problem)} }
                 }
                 ProblemPage::Solution(solution) => {
                     nav {
                         a href={"/problem/"(problem)} { (problem) };
+                        (login)
                     }
                     h1 { "Solution " mark{(solution)} }
                 }

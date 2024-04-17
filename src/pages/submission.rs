@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     response::Html,
 };
+use axum_extra::extract::CookieJar;
 use maud::html;
 use rust_query::{client::QueryBuilder, value::Value};
 
@@ -16,6 +17,7 @@ use crate::{
 pub async fn submission(
     State(app): State<AppState>,
     Path((problem, solution_hash)): Path<(String, String)>,
+    jar: CookieJar,
 ) -> Result<Html<String>, StatusCode> {
     println!("got user for {problem}");
 
@@ -82,7 +84,7 @@ pub async fn submission(
         ProblemPage::Solution(solution_hash.to_string()),
     );
     let res = html! {
-        (header(location))
+        (header(location, &jar))
         @if let Some(seed) = failure {
             p class="notice" {
                 "Failed for seed " (seed as u64)
