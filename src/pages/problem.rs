@@ -230,7 +230,7 @@ pub async fn upload(
     multipart: Multipart,
 ) -> Result<Redirect, String> {
     match inner_upload(app, &file_name, jar, multipart).await {
-        Ok(file) => Ok(Redirect::to(&format!("/{file_name}/{file}"))),
+        Ok(file) => Ok(Redirect::to(&format!("/problem/{file_name}/{file}"))),
         Err(err) => Err(err),
     }
 }
