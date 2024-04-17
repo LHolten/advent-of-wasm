@@ -30,7 +30,7 @@
               User = "advent-of-wasm";
               Group = "advent-of-wasm";
               WorkingDirectory = "/var/lib/advent-of-wasm";
-              StateDirectory = "/var/lib/advent-of-wasm";
+              StateDirectory = "advent-of-wasm";
             };
           };
           
