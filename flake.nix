@@ -39,6 +39,19 @@
             group = "advent-of-wasm";
           };
           users.groups.advent-of-wasm = {};
+
+          services.nginx = {
+            recommendedProxySettings = true;
+
+            virtualHosts."wasm.lucasholten.com" = {
+              enableACME = true;
+              forceSSL = true;
+
+              locations."/" = {
+                proxyPass = "http://127.0.0.1:3000";
+              };
+            };
+          };
         };
 
         # For `nix develop`:
