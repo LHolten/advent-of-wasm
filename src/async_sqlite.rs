@@ -53,7 +53,7 @@ impl SharedConnection {
         let wrapper: CallFn = Box::new(move |conn| {
             let res = func(conn);
             // since res does not implement Debug, we can not get more info
-            assert!(sender.send(res).is_ok());
+            let _ = sender.send(res);
         });
         // the closure does not implement Debug either.
         assert!(self.sender.send(wrapper).await.is_ok());
