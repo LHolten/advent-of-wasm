@@ -42,7 +42,7 @@ impl Solution {
         // call the actual solve function
         let answer = func
             .call(&mut store, data.len() as i32)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("{e:?}"))?;
 
         Ok(Run {
             fuel_used: store.fuel_consumed().unwrap(),

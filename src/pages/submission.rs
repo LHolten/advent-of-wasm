@@ -4,7 +4,7 @@ use axum::{
     response::Html,
 };
 use axum_extra::extract::CookieJar;
-use maud::html;
+use maud::{html, Markup};
 use rust_query::{client::QueryBuilder, value::Value};
 
 use crate::{
@@ -49,6 +49,11 @@ pub async fn submission(
         })
         .await;
 
+    struct Fail {
+        seed: u64,
+        message: String,
+    }
+
     let failure = app
         .conn
         .call(move |conn| {
@@ -57,9 +62,10 @@ pub async fn submission(
                 let solution = &failure.solution;
                 q.filter(solution.program.file_hash.eq(i64::from(solution_hash)));
                 q.filter(solution.problem.file_hash.eq(i64::from(problem_hash)));
-                q.into_vec(u32::MAX, |row| row.get(failure.seed))
-                    .first()
-                    .copied()
+                q.into_vec(u32::MAX, |row| Fail {
+                    seed: row.get(failure.seed) as u64,
+                    message: row.get(failure.message),
+                })
             })
         })
         .await;
@@ -85,9 +91,10 @@ pub async fn submission(
     );
     let res = html! {
         (header(location, &jar))
-        @if let Some(seed) = failure {
+        @if let Some(fail) = failure.first() {
             p class="notice" {
-                "Failed for seed " (seed as u64)
+                "Failed for seed " (fail.seed)
+                pre{(fail.message)}
             }
         }
         p {
