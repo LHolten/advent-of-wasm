@@ -9,5 +9,5 @@ fn main() {
     let engine = Engine::new(Config::new().consume_fuel(true)).unwrap();
     let data = "1234".as_bytes();
     let res = sol.run(&engine, data, 10000);
-    println!("{:?}", res.answer);
+    println!("{:?}", res.unwrap().answer);
 }

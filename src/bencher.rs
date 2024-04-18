@@ -66,29 +66,37 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
             let instance = problem.generate(&problem_engine, task.instance_seed)?;
 
             let run_result = solution.run(&solution_engine, &instance.input, problem.fuel_limit);
+            let res = run_result.and_then(|r| {
+                if r.answer == instance.answer {
+                    Ok(r)
+                } else {
+                    Err(format!("program returned {}", r.answer as u64))
+                }
+            });
 
             let conn = app.conn.lock();
 
-            if run_result.answer == Some(instance.answer) {
-                conn.new_query(|q| {
-                    let instance = q.table(Instance);
-                    q.filter(instance.problem.file_hash.eq(i64::from(task.problem_hash)));
-                    q.filter(instance.seed.eq(task.instance_seed));
+            match res {
+                Ok(r) => {
+                    conn.new_query(|q| {
+                        let instance = q.table(Instance);
+                        q.filter(instance.problem.file_hash.eq(i64::from(task.problem_hash)));
+                        q.filter(instance.seed.eq(task.instance_seed));
 
-                    let solution = q.table(tables::Solution);
-                    q.filter(solution.program.file_hash.eq(i64::from(task.solution_hash)));
-                    q.filter(solution.problem.file_hash.eq(i64::from(task.problem_hash)));
+                        let solution = q.table(tables::Solution);
+                        q.filter(solution.program.file_hash.eq(i64::from(task.solution_hash)));
+                        q.filter(solution.problem.file_hash.eq(i64::from(task.problem_hash)));
 
-                    q.insert(ExecutionDummy {
-                        answer: q.select(&run_result.answer),
-                        fuel_used: q.select(run_result.fuel_used as i64),
-                        instance: q.select(instance),
-                        solution: q.select(solution),
-                        timestamp: q.select(UnixEpoch),
+                        q.insert(ExecutionDummy {
+                            answer: q.select(Some(r.answer)),
+                            fuel_used: q.select(r.fuel_used as i64),
+                            instance: q.select(instance),
+                            solution: q.select(solution),
+                            timestamp: q.select(UnixEpoch),
+                        });
                     });
-                });
-            } else {
-                conn.new_query(|q| {
+                }
+                Err(err) => conn.new_query(|q| {
                     let solution = q.table(tables::Solution);
                     q.filter(solution.program.file_hash.eq(i64::from(task.solution_hash)));
                     q.filter(solution.problem.file_hash.eq(i64::from(task.problem_hash)));
@@ -97,8 +105,9 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                         seed: q.select(task.instance_seed),
                         solution: q.select(solution),
                         timestamp: q.select(UnixEpoch),
+                        message: q.select(err.as_str()),
                     })
-                })
+                }),
             }
         }
     }

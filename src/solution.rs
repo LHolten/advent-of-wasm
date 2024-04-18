@@ -10,13 +10,13 @@ pub struct Solution {
 }
 
 #[derive(Debug)]
-pub struct RunResult {
+pub struct Run {
     pub fuel_used: u64,
-    pub answer: Option<i64>,
+    pub answer: i64,
 }
 
 impl Solution {
-    pub fn run(&self, engine: &Engine, data: &[u8], fuel: u64) -> RunResult {
+    pub fn run(&self, engine: &Engine, data: &[u8], fuel: u64) -> Result<Run, String> {
         let path = format!("solution/{}.wasm", &self.hash);
         let module = ModulePath(path.into()).load(engine).unwrap();
         // first instantiate, this calls optional start
@@ -42,13 +42,12 @@ impl Solution {
         // call the actual solve function
         let answer = func
             .call(&mut store, data.len() as i32)
-            .inspect_err(|e| println!("ERROR: {} {e}", self.hash))
-            .ok();
+            .map_err(|e| e.to_string())?;
 
-        RunResult {
+        Ok(Run {
             fuel_used: store.fuel_consumed().unwrap(),
             answer,
-        }
+        })
     }
 }
 

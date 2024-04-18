@@ -31,7 +31,8 @@ CREATE TABLE failure (
     id INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch('now')),
     solution INTEGER NOT NULL UNIQUE REFERENCES solution,
-    seed INTEGER NOT NULL
+    seed INTEGER NOT NULL,
+    message TEXT NOT NULL
 ) STRICT;
 
 -- a user of the server
