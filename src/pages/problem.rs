@@ -26,6 +26,7 @@ use crate::{
     AppState,
 };
 
+#[derive(Clone)]
 struct SolutionStats {
     name: String,
     max_fuel: u64,
@@ -147,9 +148,9 @@ window.addEventListener('resize', function() {{
     Ok(Html(res.into_string()))
 }
 
-fn graph(data: &[SolutionStats]) -> Root {
+fn pareto(data: &[SolutionStats]) -> Vec<[u64; 2]> {
     // data is sorted by file size
-    let mut pareto: Vec<_> = data
+    let mut tmp: Vec<_> = data
         .iter()
         .enumerate()
         .filter(|(i, sol)| {
@@ -158,32 +159,24 @@ fn graph(data: &[SolutionStats]) -> Root {
         })
         .map(|(_i, data)| [data.file_size, data.max_fuel])
         .collect();
-
     const MAX: u64 = 501;
-    let min_size = pareto.iter().map(|d| d[0]).min().unwrap_or(MAX);
-    let min_fuel = pareto.iter().map(|d| d[1]).min().unwrap_or(MAX);
-    pareto.insert(0, [min_size, MAX]);
-    pareto.push([MAX, min_fuel]);
+    let min_size = tmp.iter().map(|d| d[0]).min().unwrap_or(MAX);
+    let min_fuel = tmp.iter().map(|d| d[1]).min().unwrap_or(MAX);
+    tmp.insert(0, [min_size, MAX]);
+    tmp.push([MAX, min_fuel]);
+    tmp
+}
 
-    // let chart_data = data
-    //     .iter()
-    //     .filter_map(|sol| Some([sol.file_size, sol.max_fuel.parse().ok()?]))
-    //     .collect();
+fn graph(data: &[SolutionStats]) -> Root {
+    let your_data: Vec<_> = data.iter().filter(|d| d.yours).cloned().collect();
+    let your_pareto = pareto(&your_data);
+    let pareto = pareto(data);
 
-    // let pointer = AxisPointer {
-    //     show: true,
-    //     r#type: "cross".to_owned(),
-    //     snap: true,
-    //     label: Label {
-    //         precision: "0".to_string(),
-    //     },
-    // };
     Root {
         title: Title {
             text: "Pareto Front".to_owned(),
         },
         tooltip: Tooltip {
-            // axis_pointer: pointer,
             formatter: "size,fuel = {c}".to_owned(),
         },
         grid: Grid {
@@ -193,23 +186,18 @@ fn graph(data: &[SolutionStats]) -> Root {
             r#type: "log".to_owned(),
             name: "File Size".to_owned(),
             max: 500,
-            min: min_size,
-            // axis_pointer: pointer.clone(),
-            // data: pareto.iter().map(|d| d[0]).collect(),
+            min: 10,
         },
         y_axis: Axis {
             r#type: "log".to_owned(),
             name: "Max Fuel".to_owned(),
             max: 500,
-            min: min_fuel,
-            // axis_pointer: pointer,
-            // data: pareto.iter().map(|d| d[1]).collect(),
+            min: 10,
         },
         series: vec![
             Series::Scatter {
-                data: data
+                data: your_data
                     .iter()
-                    .filter(|d| d.yours)
                     .map(|d| [d.file_size, d.max_fuel])
                     .collect(),
             },
@@ -222,11 +210,11 @@ fn graph(data: &[SolutionStats]) -> Root {
             },
             Series::Line {
                 step: "end".to_owned(),
+                data: your_pareto,
+            },
+            Series::Line {
+                step: "end".to_owned(),
                 data: pareto,
-                // area_style: AreaStyle {
-                //     opacity: 0.2,
-                //     origin: "end".to_owned(),
-                // },
             },
         ],
     }

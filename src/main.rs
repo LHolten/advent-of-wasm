@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
             q.insert(FileDummy {
                 timestamp: q.select(UnixEpoch),
                 file_hash: q.select(i64::from(*file_hash)),
-                file_size: q.select(problem.file_name.len().unwrap() as i64),
+                file_size: q.select(problem.file_name.file_len().unwrap() as i64),
             })
         });
 

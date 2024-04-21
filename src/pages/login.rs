@@ -77,7 +77,8 @@ pub async fn redirect(
         github_token.access_token().secret().to_string(),
     ));
     jar = jar.remove(Cookie::from("state"));
-    let _ = safe_login(&app, &mut jar).await;
+    let github_id = safe_login(&app, &mut jar).await?;
+    jar = jar.add(Cookie::new("github_id", (github_id.0 as u64).to_string()));
 
     Ok((jar, Redirect::to("/problem/decimal")))
 }
@@ -109,7 +110,7 @@ pub async fn safe_login(app: &AppState, jar: &mut CookieJar) -> Result<GithubId,
         .build()
         .unwrap()
         .get("https://api.github.com/user")
-        .bearer_auth(access_token)
+        .bearer_auth(access_token.value())
         .header("X-GitHub-Api-Version", "2022-11-28")
         .header("Accept", "application/vnd.github+json")
         .send()

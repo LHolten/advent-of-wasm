@@ -65,7 +65,7 @@ impl ModulePath {
     }
 
     #[throws(anyhow::Error)]
-    pub fn len(&self) -> usize {
+    pub fn file_len(&self) -> usize {
         let buf = fs::read(&self.0)?;
         buf.len()
     }

@@ -50,11 +50,12 @@ enum ProblemPage {
 }
 
 fn header(location: Location, jar: &CookieJar) -> Markup {
-    let login = match jar.get("access_token") {
-        Some(_) => html! {
+    let logged_in = jar.get("access_token").is_some() && jar.get("github_id").is_some();
+    let login = match logged_in {
+        true => html! {
             "logged in"
         },
-        None => html! {
+        false => html! {
             a href="/login" { "login!" };
         },
     };
