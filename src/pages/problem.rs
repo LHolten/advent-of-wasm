@@ -159,7 +159,7 @@ fn pareto(data: &[SolutionStats]) -> Vec<[u64; 2]> {
         })
         .map(|(_i, data)| [data.file_size, data.max_fuel])
         .collect();
-    const MAX: u64 = 501;
+    const MAX: u64 = 513;
     let min_size = tmp.iter().map(|d| d[0]).min().unwrap_or(MAX);
     let min_fuel = tmp.iter().map(|d| d[1]).min().unwrap_or(MAX);
     tmp.insert(0, [min_size, MAX]);
@@ -185,14 +185,14 @@ fn graph(data: &[SolutionStats]) -> Root {
         x_axis: Axis {
             r#type: "log".to_owned(),
             name: "File Size".to_owned(),
-            max: 500,
-            min: 10,
+            max: 512,
+            log_base: 2,
         },
         y_axis: Axis {
             r#type: "log".to_owned(),
             name: "Max Fuel".to_owned(),
-            max: 500,
-            min: 10,
+            max: 512,
+            log_base: 2,
         },
         series: vec![
             Series::Scatter {

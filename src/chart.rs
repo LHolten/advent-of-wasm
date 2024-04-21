@@ -62,7 +62,9 @@ pub struct Axis {
     pub r#type: String,
     pub name: String,
     pub max: u64,
-    pub min: u64,
+    // pub min: String,
+    pub log_base: u64,
+    // pub min: u64,
     // pub axis_pointer: AxisPointer,
 }
 
