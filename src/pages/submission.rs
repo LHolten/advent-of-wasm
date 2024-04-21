@@ -4,7 +4,7 @@ use axum::{
     response::Html,
 };
 use axum_extra::extract::CookieJar;
-use maud::{html, Markup};
+use maud::html;
 use rust_query::{client::QueryBuilder, value::Value};
 
 use crate::{

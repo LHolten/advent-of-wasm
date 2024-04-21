@@ -1,16 +1,21 @@
 use std::fs;
 
-use axum::extract::Query;
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::Redirect;
 use axum_extra::extract::{cookie::Cookie, CookieJar};
 use oauth2::reqwest::async_http_client;
 use oauth2::TokenResponse;
 use oauth2::{
-    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl,
-    TokenUrl,
+    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, TokenUrl,
 };
+use rust_query::client::QueryBuilder;
+use rust_query::value::UnixEpoch;
 use serde::Deserialize;
+
+use crate::db::GithubId;
+use crate::tables::UserDummy;
+use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct Auth {
@@ -51,27 +56,29 @@ fn make_client() -> BasicClient {
 }
 
 pub async fn redirect(
+    State(app): State<AppState>,
     Query(auth): Query<Auth>,
     mut jar: CookieJar,
-) -> Result<(CookieJar, Redirect), StatusCode> {
+) -> Result<(CookieJar, Redirect), String> {
     let code = AuthorizationCode::new(auth.code);
     if auth.state != jar.get("state").unwrap().value() {
-        return Err(StatusCode::BAD_REQUEST);
+        return Err("state does not match".into());
     }
 
     let client = make_client();
-    let token_res = client
+    let github_token = client
         .exchange_code(code)
         .request_async(async_http_client)
-        .await;
+        .await
+        .map_err(|_| "can not get token from github")?;
 
-    println!("Github returned the following token:\n{:?}\n", token_res);
+    jar = jar.add(Cookie::new(
+        "access_token",
+        github_token.access_token().secret().to_string(),
+    ));
+    jar = jar.remove(Cookie::from("state"));
+    let _ = safe_login(&app, &mut jar).await;
 
-    if let Ok(token) = token_res {
-        let token_str = token.access_token().secret();
-        jar = jar.add(Cookie::new("access_token", token_str.to_owned()));
-        jar = jar.remove(Cookie::from("state"));
-    }
     Ok((jar, Redirect::to("/problem/decimal")))
 }
 
@@ -86,4 +93,48 @@ pub async fn login(mut jar: CookieJar) -> Result<(CookieJar, Redirect), StatusCo
     jar = jar.add(Cookie::new("state", csrf_state.secret().to_owned()));
 
     Ok((jar, Redirect::to(authorize_url.as_str())))
+}
+
+pub async fn fast_login(jar: &CookieJar) -> Option<GithubId> {
+    let github_id = jar.get("github_id")?;
+    let github_id = github_id.value().parse::<u64>().ok()?;
+    Some(GithubId(github_id as i64))
+}
+
+pub async fn safe_login(app: &AppState, jar: &mut CookieJar) -> Result<GithubId, String> {
+    let access_token = jar.get("access_token").ok_or("not logged in")?;
+
+    let response = reqwest::Client::builder()
+        .user_agent("wasm-bench")
+        .build()
+        .unwrap()
+        .get("https://api.github.com/user")
+        .bearer_auth(access_token)
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|_| "error connecting to github")?
+        .error_for_status()
+        .map_err(|_| "could not get github info, try logging in again")?;
+    let text = response.text().await.map_err(|_| "github response error")?;
+    println!("{}", text);
+
+    let val: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let github_id = val.get("id").unwrap().as_u64().unwrap();
+    let github_login = val.get("login").unwrap().as_str().unwrap().to_owned();
+
+    app.conn
+        .call(move |conn| {
+            conn.new_query(|q| {
+                q.insert(UserDummy {
+                    github_id: q.select(github_id as i64),
+                    github_login: q.select(github_login.as_str()),
+                    timestamp: q.select(UnixEpoch),
+                })
+            });
+        })
+        .await;
+
+    Ok(GithubId(github_id as i64))
 }

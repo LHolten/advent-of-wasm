@@ -14,18 +14,23 @@ use rust_query::{
 
 use crate::{
     chart::{Axis, Grid, Root, Series, Title, Tooltip},
-    db::{get_file, get_user, GithubId},
+    db::{get_file, get_user},
     hash::{self, FileHash},
-    pages::{header, Location, ProblemPage},
+    pages::{
+        header,
+        login::{fast_login, safe_login},
+        Location, ProblemPage,
+    },
     solution::verify_wasm,
-    tables::{self, FileDummy, SolutionDummy, SubmissionDummy, UserDummy},
+    tables::{self, FileDummy, SolutionDummy, SubmissionDummy},
     AppState,
 };
 
 struct SolutionStats {
     name: String,
-    max_fuel: String,
+    max_fuel: u64,
     file_size: u64,
+    yours: bool,
 }
 
 pub async fn get_problem(
@@ -35,6 +40,8 @@ pub async fn get_problem(
     // uri: Uri,
 ) -> Result<Html<String>, StatusCode> {
     println!("got user for {problem}");
+
+    let github_id = fast_login(&jar).await;
 
     let problem_hash = *app
         .problem_dir
@@ -54,6 +61,7 @@ pub async fn get_problem(
                     q.filter_on(&failures.solution, &solution);
                     q.group().exists()
                 });
+                q.filter(fail.not());
                 let total_instances = q.query(|q| {
                     let instance = q.table(tables::Instance);
                     q.filter(instance.problem.file_hash.eq(i64::from(problem_hash)));
@@ -66,16 +74,23 @@ pub async fn get_problem(
                     let group = &q.group();
                     (group.max(exec.fuel_used), group.count_distinct(exec))
                 });
+                q.filter(count.eq(total_instances));
+                let yours = q.query(|q| {
+                    let subm = q.table(tables::Submission);
+                    q.filter_on(&subm.solution, &solution.program);
+                    if let Some(github_id) = github_id {
+                        q.filter(subm.user.github_id.eq(github_id.0));
+                    } else {
+                        q.filter(false);
+                    }
+                    q.group().exists()
+                });
+
                 q.into_vec(u32::MAX, |row| SolutionStats {
                     file_size: row.get(solution.program.file_size) as u64,
                     name: FileHash::from(row.get(solution.program.file_hash)).to_string(),
-                    max_fuel: if row.get(fail) {
-                        "Failed".to_owned()
-                    } else if row.get(count) == row.get(total_instances) {
-                        row.get(max_fuel).unwrap().to_string()
-                    } else {
-                        format!("benched {} / {}", row.get(count), row.get(total_instances))
-                    },
+                    max_fuel: row.get(max_fuel).unwrap() as u64,
+                    yours: row.get(yours),
                 })
             })
         })
@@ -133,19 +148,6 @@ window.addEventListener('resize', function() {{
 }
 
 fn graph(data: &[SolutionStats]) -> Root {
-    struct Data {
-        file_size: u64,
-        max_fuel: u64,
-    }
-    let data: Vec<_> = data
-        .iter()
-        .filter_map(|sol| {
-            Some(Data {
-                file_size: sol.file_size,
-                max_fuel: sol.max_fuel.parse().ok()?,
-            })
-        })
-        .collect();
     // data is sorted by file size
     let mut pareto: Vec<_> = data
         .iter()
@@ -205,11 +207,18 @@ fn graph(data: &[SolutionStats]) -> Root {
         },
         series: vec![
             Series::Scatter {
-                data: data.iter().map(|d| [d.file_size, d.max_fuel]).collect(),
-                // tooltip: Tooltip {
-                //     // axis_pointer: pointer,
-                //     formatter: "size,fuel = {c}".to_owned(),
-                // },
+                data: data
+                    .iter()
+                    .filter(|d| d.yours)
+                    .map(|d| [d.file_size, d.max_fuel])
+                    .collect(),
+            },
+            Series::Scatter {
+                data: data
+                    .iter()
+                    .filter(|d| !d.yours)
+                    .map(|d| [d.file_size, d.max_fuel])
+                    .collect(),
             },
             Series::Line {
                 step: "end".to_owned(),
@@ -226,10 +235,10 @@ fn graph(data: &[SolutionStats]) -> Root {
 pub async fn upload(
     State(app): State<AppState>,
     Path(file_name): Path<String>,
-    jar: CookieJar,
+    mut jar: CookieJar,
     multipart: Multipart,
 ) -> Result<Redirect, String> {
-    match inner_upload(app, &file_name, jar, multipart).await {
+    match inner_upload(app, &file_name, &mut jar, multipart).await {
         Ok(file) => Ok(Redirect::to(&format!("/problem/{file_name}/{file}"))),
         Err(err) => Err(err),
     }
@@ -238,32 +247,12 @@ pub async fn upload(
 async fn inner_upload(
     app: AppState,
     file_name: &str,
-    jar: CookieJar,
+    jar: &mut CookieJar,
     mut multipart: Multipart,
 ) -> Result<FileHash, String> {
     println!("got multipart");
 
-    let access_token = jar.get("access_token").ok_or("not logged in")?;
-    let response = reqwest::Client::builder()
-        .user_agent("wasm-bench")
-        .build()
-        .unwrap()
-        .get("https://api.github.com/user")
-        .bearer_auth(access_token.value())
-        .header("X-GitHub-Api-Version", "2022-11-28")
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|_| "error connecting to github")?
-        .error_for_status()
-        .map_err(|_| "could not get github info, try logging in again")?;
-    let text = response.text().await.map_err(|_| "github response error")?;
-    println!("{}", text);
-
-    let val: serde_json::Value = serde_json::from_str(&text).unwrap();
-    let github_id = val.get("id").unwrap().as_i64().unwrap();
-    let github_id = GithubId(github_id);
-    let github_login = val.get("login").unwrap().as_str().unwrap().to_owned();
+    let github_id = safe_login(&app, jar).await?;
 
     let field = multipart.next_field().await.unwrap().unwrap();
     assert_eq!(field.name().unwrap(), "wasm");
@@ -283,13 +272,6 @@ async fn inner_upload(
 
     app.conn
         .call(move |conn| {
-            conn.new_query(|q| {
-                q.insert(UserDummy {
-                    github_id: q.select(github_id.0),
-                    github_login: q.select(github_login.as_str()),
-                    timestamp: q.select(UnixEpoch),
-                })
-            });
             conn.new_query(|q| {
                 q.insert(FileDummy {
                     file_hash: q.select(i64::from(solution_hash)),

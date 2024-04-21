@@ -124,7 +124,7 @@ mod tests {
         };
         let engine = Engine::new(Config::new().consume_fuel(true))?;
         let res = solution.run(&engine, &problem.input, 10000);
-        assert_eq!(res.answer, Some(30));
+        assert_eq!(res.unwrap().answer, 30);
 
         Ok(())
     }
