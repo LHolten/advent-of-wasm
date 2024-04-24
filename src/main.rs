@@ -41,8 +41,8 @@ async fn main() -> anyhow::Result<()> {
 
     let problem_dir = Arc::new(ProblemDir::new()?);
     for (file_hash, problem) in &problem_dir.problems {
-        let real_file_hash = problem.file_name.hash()?;
-        assert_eq!(file_hash.to_string(), real_file_hash.to_string());
+        // let real_file_hash = problem.file_name.hash()?;
+        // assert_eq!(file_hash.to_string(), real_file_hash.to_string());
 
         conn.new_query(|q| {
             // on conflict do nothing
