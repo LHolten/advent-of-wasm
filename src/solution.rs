@@ -86,6 +86,24 @@ fn add_env(linker: &mut Linker<Data>) -> &mut Linker<Data> {
         .unwrap()
         .func_wrap(
             "env",
+            "load8",
+            move |mut caller: Caller<'_, Data>, ptr: i32| {
+                let Data {
+                    store, solution, ..
+                } = caller.data_mut();
+                let mem = solution
+                    .get_memory(&mut *store, "memory")
+                    .ok_or(anyhow!("export `memory` is not a memory"))?;
+
+                let mut buf = vec![0];
+                mem.read(&mut *store, ptr as usize, &mut buf)
+                    .map_err(|_| anyhow!("can not read outside the memory"))?;
+                Ok(buf[0] as i32)
+            },
+        )
+        .unwrap()
+        .func_wrap(
+            "env",
             "store8",
             move |mut caller: Caller<'_, Data>, ptr: i32, val: i32| {
                 let Data {
@@ -132,13 +150,22 @@ fn add_env(linker: &mut Linker<Data>) -> &mut Linker<Data> {
             },
         )
         .unwrap()
+        .func_wrap("env", "push64", |mut caller: Caller<'_, Data>, val: i64| {
+            caller.data_mut().stack.push(Val::I64(val))
+        })
+        .unwrap()
         .func_wrap("env", "push32", |mut caller: Caller<'_, Data>, val: i32| {
             caller.data_mut().stack.push(Val::I32(val))
         })
         .unwrap()
         .func_wrap("env", "pop64", |mut caller: Caller<'_, Data>| {
             let val = caller.data_mut().stack.pop().unwrap();
-            val.i64().ok_or(anyhow!("expected function to return i32"))
+            val.i64().ok_or(anyhow!("expected function to return i64"))
+        })
+        .unwrap()
+        .func_wrap("env", "pop32", |mut caller: Caller<'_, Data>| {
+            let val = caller.data_mut().stack.pop().unwrap();
+            val.i32().ok_or(anyhow!("expected function to return i32"))
         })
         .unwrap()
         .func_wrap(
