@@ -1,6 +1,5 @@
 use rust_query::client::QueryBuilder;
 use rust_query::value::{UnixEpoch, Value};
-use wasmtime::{Config, Engine};
 
 use crate::tables::{ExecutionDummy, FailureDummy, Instance};
 use crate::{
@@ -17,8 +16,6 @@ struct QueuedTask {
 }
 
 pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
-    let problem_engine = Engine::default();
-    let solution_engine = Engine::new(Config::new().consume_fuel(true))?;
     loop {
         // wait for database state to change
         app.conn.wait();
@@ -63,21 +60,13 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                 hash: task.solution_hash,
             };
             let problem = &app.problem_dir.problems[&task.problem_hash];
-            let instance = problem.generate(&problem_engine, task.instance_seed)?;
 
-            let run_result = solution.run(&solution_engine, &instance.input, problem.fuel_limit);
-            let res = run_result.and_then(|r| {
-                if r.answer == instance.answer {
-                    Ok(r)
-                } else {
-                    Err(format!("program returned {}", r.answer as u64))
-                }
-            });
+            let res = solution.run(problem, task.instance_seed);
 
             let conn = app.conn.lock();
 
             match res {
-                Ok(r) => {
+                Ok(fuel) => {
                     conn.new_query(|q| {
                         let instance = q.table(Instance);
                         q.filter(instance.problem.file_hash.eq(i64::from(task.problem_hash)));
@@ -88,8 +77,8 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                         q.filter(solution.problem.file_hash.eq(i64::from(task.problem_hash)));
 
                         q.insert(ExecutionDummy {
-                            answer: q.select(Some(r.answer)),
-                            fuel_used: q.select(r.fuel_used as i64),
+                            answer: q.select(None::<i64>),
+                            fuel_used: q.select(fuel as i64),
                             instance: q.select(instance),
                             solution: q.select(solution),
                             timestamp: q.select(UnixEpoch),

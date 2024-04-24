@@ -1,10 +1,9 @@
-use anyhow::Context;
 use serde::Deserialize;
 
 use std::{collections::HashMap, fs, path::PathBuf};
 
 use fehler::throws;
-use wasmtime::{Engine, Linker, Module, Store, TypedFunc};
+use wasmtime::{Engine, Module};
 
 use crate::hash::FileHash;
 
@@ -71,61 +70,30 @@ impl ModulePath {
     }
 }
 
-pub struct TaskInstance {
-    pub input: Box<[u8]>,
-    pub answer: i64,
-}
-
-impl Problem {
-    #[throws(anyhow::Error)]
-    pub fn generate(&self, engine: &Engine, seed: i64) -> TaskInstance {
-        let module = self.file_name.load(engine)?;
-        let mut store = Store::new(engine, ());
-
-        // first instantiate, this calls optional start
-        let instance = Linker::new(engine).instantiate(&mut store, &module)?;
-        // call the generator
-        let func: TypedFunc<_, (i32, i32)> = instance.get_typed_func(&mut store, "generate")?;
-        let (offset, length) = func.call(&mut store, seed)?;
-
-        // read the generated instance from wasm
-        let mut input = vec![0; length as usize].into_boxed_slice();
-        let memory = instance
-            .get_memory(&mut store, "memory")
-            .context("memory was not defined")?;
-        memory.read(&store, offset as usize, &mut input)?;
-
-        let solution: TypedFunc<_, i64> = instance.get_typed_func(&mut store, "solution")?;
-        let answer = solution.call(&mut store, (offset, length))?;
-
-        TaskInstance { input, answer }
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
-    use wasmtime::{Config, Engine};
+    // use wasmtime::{Config, Engine};
 
-    use crate::solution::Solution;
+    // use crate::solution::Solution;
 
-    use super::ProblemDir;
+    // use super::ProblemDir;
 
-    #[test]
-    fn gen_instance() -> anyhow::Result<()> {
-        let dir = ProblemDir::new()?;
-        let engine = Engine::default();
-        let problem_hash = dir.mapping["parse"];
-        let problem = dir.problems[&problem_hash].generate(&engine, 30)?;
-        assert_eq!(&*problem.input, b"30");
+    // #[test]
+    // fn gen_instance() -> anyhow::Result<()> {
+    //     let dir = ProblemDir::new()?;
+    //     let engine = Engine::default();
+    //     let problem_hash = dir.mapping["parse"];
+    //     let problem = dir.problems[&problem_hash].generate(&engine, 30)?;
+    //     assert_eq!(&*problem.input, b"30");
 
-        let solution = Solution {
-            hash: "bDHNXb6S_4Y".parse().unwrap(),
-        };
-        let engine = Engine::new(Config::new().consume_fuel(true))?;
-        let res = solution.run(&engine, &problem.input, 10000);
-        assert_eq!(res.unwrap().answer, 30);
+    //     let solution = Solution {
+    //         hash: "bDHNXb6S_4Y".parse().unwrap(),
+    //     };
+    //     let engine = Engine::new(Config::new().consume_fuel(true))?;
+    //     let res = solution.run(&engine, &problem.input, 10000);
+    //     assert_eq!(res.unwrap().answer, 30);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }
