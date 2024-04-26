@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use axum_extra::extract::CookieJar;
-use maud::{html, Markup};
+use maud::{html, Markup, DOCTYPE};
 use rusqlite::Connection;
 
 use crate::{async_sqlite::SharedConnection, bencher::bencher_main, problem::ProblemDir, AppState};
@@ -17,6 +17,7 @@ use self::{
 
 mod login;
 mod problem;
+mod problem_list;
 mod submission;
 
 pub async fn web_server(problem_dir: Arc<ProblemDir>, conn: Connection) -> anyhow::Result<()> {
@@ -25,6 +26,7 @@ pub async fn web_server(problem_dir: Arc<ProblemDir>, conn: Connection) -> anyho
 
     // build our application with a single route
     let app = Router::new()
+        .route("/problem", get(problem_list::get_problem_list))
         .route("/problem/:problem", get(get_problem))
         .route("/problem/:problem", post(upload))
         .route("/problem/:problem/:solution_hash", get(submission))
@@ -42,6 +44,7 @@ pub async fn web_server(problem_dir: Arc<ProblemDir>, conn: Connection) -> anyho
 
 enum Location {
     Problem(String, ProblemPage),
+    Home,
 }
 
 enum ProblemPage {
@@ -49,7 +52,41 @@ enum ProblemPage {
     Solution(String),
 }
 
-fn header(location: Location, jar: &CookieJar) -> Markup {
+fn nav(location: &Location, login: Markup) -> Markup {
+    html! {
+        nav {
+            @if let Location::Problem(problem, page) = location {
+                a href={"/problem"} { "problem" };
+                @if let ProblemPage::Solution(_) = page {
+                    a href={"/problem/"(problem)} { (problem) };
+                }
+            }
+            (login)
+        }
+    }
+}
+
+fn title(location: &Location) -> Markup {
+    html! {
+        @match location {
+            Location::Problem(problem, page) => {
+                @match page {
+                    ProblemPage::Home => {
+                        h1 { "Problem " mark{(problem)} }
+                    }
+                    ProblemPage::Solution(solution) => {
+                        h1 { "Solution " mark{(solution)} }
+                    }
+                }
+            }
+            Location::Home => {
+                h1 { "Problem List" }
+            }
+        }
+    }
+}
+
+fn header(location: Location, jar: &CookieJar, rest: Markup) -> Markup {
     let logged_in = jar.get("access_token").is_some() && jar.get("github_id").is_some();
     let login = match logged_in {
         true => html! {
@@ -60,31 +97,22 @@ fn header(location: Location, jar: &CookieJar) -> Markup {
         },
     };
 
-    let Location::Problem(problem, page) = location;
     html! {
-        head {
-            link rel="stylesheet" href="https://cdn.simplecss.org/simple.css";
-            // link rel="stylesheet" href="https://unpkg.com/chota";
-            // style { (include_str!("style.css")) }
+        (DOCTYPE)
+        html {
+            head {
+                link rel="stylesheet" href="https://cdn.simplecss.org/simple.css";
+                // link rel="stylesheet" href="https://unpkg.com/chota";
+                // style { (include_str!("style.css")) }
 
-            script src="https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.js" {}
-            script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.js" {}
-        }
-        header {
-            @match page {
-                ProblemPage::Home => {
-                    nav {(login)}
-                    h1 { "Problem " mark{(problem)} }
-                }
-                ProblemPage::Solution(solution) => {
-                    nav {
-                        a href={"/problem/"(problem)} { (problem) };
-                        (login)
-                    }
-                    h1 { "Solution " mark{(solution)} }
-                }
+                script src="https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.js" {}
+                script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.js" {}
             }
-            // a href=""
+            header {
+                (nav(&location, login))
+                (title(&location))
+            }
+            (rest)
         }
     }
 }

@@ -127,7 +127,6 @@ window.addEventListener('resize', function() {{
 
     let location = Location::Problem(problem.clone(), ProblemPage::Home);
     let res = html! {
-        (header(location, &jar))
         table {
             // caption { "Scores" }
             thead {
@@ -160,6 +159,7 @@ window.addEventListener('resize', function() {{
             }
         }
     };
+    let res = header(location, &jar, res);
     Ok(Html(res.into_string()).into_response())
 }
 

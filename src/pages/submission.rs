@@ -90,7 +90,6 @@ pub async fn submission(
         ProblemPage::Solution(solution_hash.to_string()),
     );
     let res = html! {
-        (header(location, &jar))
         @if let Some(fail) = failure.first() {
             p class="notice" {
                 "Failed for seed " (fail.seed)
@@ -118,5 +117,6 @@ pub async fn submission(
             }
         }
     };
+    let res = header(location, &jar, res);
     Ok(Html(res.into_string()))
 }
