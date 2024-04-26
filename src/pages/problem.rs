@@ -1,16 +1,16 @@
 use std::fs;
 
 use axum::{
-    extract::{Multipart, Path, State},
-    http::StatusCode,
-    response::{Html, Redirect},
+    extract::{Multipart, Path, Query, State},
+    response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::CookieJar;
 use maud::{html, PreEscaped};
 use rust_query::{
     client::QueryBuilder,
-    value::{UnixEpoch, Value},
+    value::{Db, UnixEpoch, Value},
 };
+use serde::Deserialize;
 
 use crate::{
     chart::{Axis, Grid, Root, Series, Title, Tooltip},
@@ -26,6 +26,11 @@ use crate::{
     AppState,
 };
 
+#[derive(Deserialize)]
+pub struct SolutionQuery {
+    score: Option<String>,
+}
+
 #[derive(Clone)]
 struct SolutionStats {
     name: String,
@@ -38,47 +43,54 @@ pub async fn get_problem(
     State(app): State<AppState>,
     Path(problem): Path<String>,
     jar: CookieJar,
+    Query(query): Query<SolutionQuery>,
     // uri: Uri,
-) -> Result<Html<String>, StatusCode> {
+) -> Result<Response, String> {
     println!("got user for {problem}");
-
-    let github_id = fast_login(&jar).await;
 
     let problem_hash = *app
         .problem_dir
         .mapping
         .get(&problem)
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .ok_or("could not find problem")?;
+
+    if let Some(score) = query.score {
+        let (size, fuel) = score.split_once(',').ok_or("expected two part score")?;
+        let size: u64 = size.parse().map_err(|_| "could not parse size")?;
+        let fuel: u64 = fuel.parse().map_err(|_| "could not parse fuel")?;
+
+        let hashes = app
+            .conn
+            .call(move |conn| {
+                conn.new_query(|q| {
+                    let sfp = solutions_for_problem(q, problem_hash);
+                    q.filter(sfp.solution.program.file_size.eq(size as i64));
+                    q.filter(sfp.max_fuel.eq(fuel as i64));
+                    q.into_vec(u32::MAX, |row| {
+                        FileHash::from(row.get(sfp.solution.program.file_hash))
+                    })
+                })
+            })
+            .await;
+        if hashes.len() == 1 {
+            let target = format!("{problem}/{}", &hashes[0]);
+            return Ok(Redirect::to(&target).into_response());
+        } else {
+            return Err("there are multiple solutions with that score".to_owned());
+        }
+    }
+
+    let github_id = fast_login(&jar).await;
 
     let data = app
         .conn
         .call(move |conn| {
             // list solutions for this problem
             conn.new_query(|q| {
-                let solution = q.table(tables::Solution);
-                q.filter(solution.problem.file_hash.eq(i64::from(problem_hash)));
-                let fail = q.query(|q| {
-                    let failures = q.table(tables::Failure);
-                    q.filter_on(&failures.solution, &solution);
-                    q.group().exists()
-                });
-                q.filter(fail.not());
-                let total_instances = q.query(|q| {
-                    let instance = q.table(tables::Instance);
-                    q.filter(instance.problem.file_hash.eq(i64::from(problem_hash)));
-                    q.group().count_distinct(instance)
-                });
-                let (max_fuel, count) = q.query(|q| {
-                    let exec = q.table(tables::Execution);
-                    q.filter_on(&exec.solution, &solution);
-                    q.filter(exec.instance.problem.file_hash.eq(i64::from(problem_hash)));
-                    let group = &q.group();
-                    (group.max(exec.fuel_used), group.count_distinct(exec))
-                });
-                q.filter(count.eq(total_instances));
+                let sfp = solutions_for_problem(q, problem_hash);
                 let yours = q.query(|q| {
                     let subm = q.table(tables::Submission);
-                    q.filter_on(&subm.solution, &solution.program);
+                    q.filter_on(&subm.solution, &sfp.solution.program);
                     if let Some(github_id) = github_id {
                         q.filter(subm.user.github_id.eq(github_id.0));
                     } else {
@@ -88,9 +100,9 @@ pub async fn get_problem(
                 });
 
                 q.into_vec(u32::MAX, |row| SolutionStats {
-                    file_size: row.get(solution.program.file_size) as u64,
-                    name: FileHash::from(row.get(solution.program.file_hash)).to_string(),
-                    max_fuel: row.get(max_fuel).unwrap() as u64,
+                    file_size: row.get(sfp.solution.program.file_size) as u64,
+                    name: FileHash::from(row.get(sfp.solution.program.file_hash)).to_string(),
+                    max_fuel: row.get(sfp.max_fuel) as u64,
                     yours: row.get(yours),
                 })
             })
@@ -103,6 +115,9 @@ pub async fn get_problem(
         "
 var chart = echarts.init(document.getElementById('chart'), null, {{ renderer: 'canvas' }});
 chart.setOption({});
+chart.on('click', 'series', function(params) {{
+    window.location.href = '?score=' + params.value;
+}});
 window.addEventListener('resize', function() {{
   chart.resize();
 }});
@@ -145,7 +160,41 @@ window.addEventListener('resize', function() {{
             }
         }
     };
-    Ok(Html(res.into_string()))
+    Ok(Html(res.into_string()).into_response())
+}
+
+struct SolutionForProblem<'a> {
+    solution: Db<'a, tables::Solution>,
+    max_fuel: Db<'a, i64>,
+}
+
+fn solutions_for_problem<'a>(
+    q: &mut rust_query::Exec<'_, 'a>,
+    problem_hash: FileHash,
+) -> SolutionForProblem<'a> {
+    let solution = q.table(tables::Solution);
+    q.filter(solution.problem.file_hash.eq(i64::from(problem_hash)));
+    let fail = q.query(|q| {
+        let failures = q.table(tables::Failure);
+        q.filter_on(&failures.solution, &solution);
+        q.group().exists()
+    });
+    q.filter(fail.not());
+    let total_instances = q.query(|q| {
+        let instance = q.table(tables::Instance);
+        q.filter(instance.problem.file_hash.eq(i64::from(problem_hash)));
+        q.group().count_distinct(instance)
+    });
+    let (max_fuel, count) = q.query(|q| {
+        let exec = q.table(tables::Execution);
+        q.filter_on(&exec.solution, &solution);
+        q.filter(exec.instance.problem.file_hash.eq(i64::from(problem_hash)));
+        let group = &q.group();
+        (group.max(exec.fuel_used), group.count_distinct(exec))
+    });
+    q.filter(count.eq(total_instances));
+    let max_fuel = q.filter_some(max_fuel);
+    SolutionForProblem { solution, max_fuel }
 }
 
 fn pareto(data: &[SolutionStats]) -> Vec<[u64; 2]> {
