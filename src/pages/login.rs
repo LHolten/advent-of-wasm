@@ -129,9 +129,9 @@ pub async fn safe_login(app: &AppState, jar: &mut CookieJar) -> Result<GithubId,
         .call(move |conn| {
             conn.new_query(|q| {
                 q.insert(UserDummy {
-                    github_id: q.select(github_id as i64),
-                    github_login: q.select(github_login.as_str()),
-                    timestamp: q.select(UnixEpoch),
+                    github_id: github_id as i64,
+                    github_login: github_login.as_str(),
+                    timestamp: UnixEpoch,
                 })
             });
         })

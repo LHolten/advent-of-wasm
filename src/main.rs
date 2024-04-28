@@ -47,9 +47,9 @@ async fn main() -> anyhow::Result<()> {
         conn.new_query(|q| {
             // on conflict do nothing
             q.insert(FileDummy {
-                timestamp: q.select(UnixEpoch),
-                file_hash: q.select(i64::from(*file_hash)),
-                file_size: q.select(problem.file_name.file_len().unwrap() as i64),
+                timestamp: UnixEpoch,
+                file_hash: i64::from(*file_hash),
+                file_size: problem.file_name.file_len().unwrap() as i64,
             })
         });
 
@@ -70,9 +70,9 @@ async fn main() -> anyhow::Result<()> {
             conn.new_query(|q| {
                 let problem = db::get_file(q, *file_hash);
                 q.insert(InstanceDummy {
-                    problem: q.select(problem),
-                    seed: q.select(seed),
-                    timestamp: q.select(UnixEpoch),
+                    problem,
+                    seed,
+                    timestamp: UnixEpoch,
                 })
             });
         }

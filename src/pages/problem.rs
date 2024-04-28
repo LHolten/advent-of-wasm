@@ -311,28 +311,28 @@ async fn inner_upload(
         .call(move |conn| {
             conn.new_query(|q| {
                 q.insert(FileDummy {
-                    file_hash: q.select(i64::from(solution_hash)),
-                    file_size: q.select(data_len as i64),
-                    timestamp: q.select(UnixEpoch),
+                    file_hash: i64::from(solution_hash),
+                    file_size: data_len as i64,
+                    timestamp: UnixEpoch,
                 })
             });
             conn.new_query(|q| {
                 let problem = get_file(q, problem_hash);
                 let program = get_file(q, solution_hash);
                 q.insert(SolutionDummy {
-                    timestamp: q.select(UnixEpoch),
-                    program: q.select(program),
-                    problem: q.select(problem),
-                    random_tests: q.select(0),
+                    timestamp: UnixEpoch,
+                    program,
+                    problem,
+                    random_tests: 0,
                 })
             });
             conn.new_query(|q| {
                 let solution = get_file(q, solution_hash);
                 let user = get_user(q, github_id);
                 q.insert(SubmissionDummy {
-                    solution: q.select(solution),
-                    timestamp: q.select(UnixEpoch),
-                    user: q.select(user),
+                    solution,
+                    timestamp: UnixEpoch,
+                    user,
                 })
             });
         })

@@ -77,11 +77,11 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                         q.filter(solution.problem.file_hash.eq(i64::from(task.problem_hash)));
 
                         q.insert(ExecutionDummy {
-                            answer: q.select(None::<i64>),
-                            fuel_used: q.select(fuel as i64),
-                            instance: q.select(instance),
-                            solution: q.select(solution),
-                            timestamp: q.select(UnixEpoch),
+                            answer: None::<i64>,
+                            fuel_used: fuel as i64,
+                            instance,
+                            solution,
+                            timestamp: UnixEpoch,
                         });
                     });
                 }
@@ -91,10 +91,10 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                     q.filter(solution.problem.file_hash.eq(i64::from(task.problem_hash)));
 
                     q.insert(FailureDummy {
-                        seed: q.select(task.instance_seed),
-                        solution: q.select(solution),
-                        timestamp: q.select(UnixEpoch),
-                        message: q.select(err.as_str()),
+                        seed: task.instance_seed,
+                        solution,
+                        timestamp: UnixEpoch,
+                        message: err.as_str(),
                     })
                 }),
             }
