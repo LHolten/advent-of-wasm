@@ -1,6 +1,6 @@
 use std::{ffi::CStr, str::from_utf8};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use fehler::{throw, throws};
 
 use wasmtime::{Caller, Config, Engine, Instance, Linker, Module, Store, Trap, Val};
@@ -34,6 +34,7 @@ impl Solution {
             solution,
             stack: vec![],
             error: None,
+            used_heap_base: false,
         };
 
         let problem_engine = Engine::default();
@@ -51,6 +52,9 @@ impl Solution {
         let call = func.call(&mut problem_store, seed);
         if let Err(e) = call {
             if let Some(e) = &problem_store.data().error {
+                if problem_store.data().used_heap_base {
+                    throw!(format!("NOTE: `__heap_base` was used because `string_base` is undefined \n solution error: \n {e:?}"))
+                }
                 throw!(format!("solution error: \n {e:?}"))
             } else if e.is::<Trap>() {
                 throw!(format!("problem error: \n {e:?}"))
@@ -67,6 +71,7 @@ struct Data {
     store: Store<()>,
     solution: Instance,
     stack: Vec<Val>,
+    used_heap_base: bool,
     error: Option<anyhow::Error>,
 }
 
@@ -74,14 +79,27 @@ fn add_env(linker: &mut Linker<Data>) -> &mut Linker<Data> {
     linker
         .func_wrap("env", "heap_base", move |mut caller: Caller<'_, Data>| {
             let Data {
-                store, solution, ..
+                store,
+                solution,
+                used_heap_base,
+                ..
             } = caller.data_mut();
-            solution
+            let string_base = solution.get_global(&mut *store, "string_base");
+            if let Some(string_base) = string_base {
+                return string_base
+                    .get(&mut *store)
+                    .i32()
+                    .ok_or(anyhow!("export `string_base` does not have type i32"));
+            }
+            // make sure that old solutions still work
+            let heap_base = solution
                 .get_global(&mut *store, "__heap_base")
-                .ok_or(anyhow!("export `__heap_base` is not a global"))?
-                .get(&mut *store)
-                .i32()
-                .ok_or(anyhow!("export `__heap_base` does not have type i32"))
+                .and_then(|x| x.get(&mut *store).i32());
+            if let Some(heap_base) = heap_base {
+                *used_heap_base = true;
+                return Ok(heap_base);
+            }
+            bail!("no global called `string_base` exists");
         })
         .unwrap()
         .func_wrap(
@@ -136,6 +154,7 @@ fn add_env(linker: &mut Linker<Data>) -> &mut Linker<Data> {
                     solution,
                     stack,
                     error,
+                    ..
                 } = caller.data_mut();
                 let func = solution
                     .get_func(&mut *store, &name)
@@ -208,6 +227,7 @@ mod tests {
             store,
             stack: vec![],
             error: None,
+            used_heap_base: false,
         }
     }
 
