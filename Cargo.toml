@@ -24,9 +24,9 @@ tokio = { version = "1.23.0", features = ["full"] }
 toml = "0.5.10"
 wasmtime = { version = "19", default-features = false, features = ["cranelift", "runtime", "wat"] }
 
-rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "13d8448" }
+rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "1650c1d" }
 reqwest = "0.12.3"
 
 [build-dependencies]
-rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "13d8448" }
+rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "1650c1d" }
 

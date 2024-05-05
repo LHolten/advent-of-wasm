@@ -1720,7 +1720,7 @@ dependencies = [
 [[package]]
 name = "rust-query"
 version = "0.1.0"
-source = "git+https://github.com/LHolten/rust-query.git?rev=13d8448#13d8448e6979ea72b2ef2ea78ab3d4a38162712c"
+source = "git+https://github.com/LHolten/rust-query.git?rev=1650c1d#1650c1d617cb873e8afa130ea4844685d3cede8d"
 dependencies = [
  "elsa",
  "heck 0.5.0",

@@ -96,7 +96,7 @@ pub async fn get_problem(
                     } else {
                         q.filter(false);
                     }
-                    q.group().exists()
+                    q.exists()
                 });
 
                 q.into_vec(u32::MAX, |row| SolutionStats {
@@ -169,7 +169,7 @@ struct SolutionForProblem<'a> {
 }
 
 fn solutions_for_problem<'a>(
-    q: &mut rust_query::Exec<'_, 'a>,
+    q: &mut rust_query::Query<'a>,
     problem_hash: FileHash,
 ) -> SolutionForProblem<'a> {
     let solution = q.table(tables::Solution);
@@ -177,23 +177,22 @@ fn solutions_for_problem<'a>(
     let fail = q.query(|q| {
         let failures = q.table(tables::Failure);
         q.filter_on(&failures.solution, &solution);
-        q.group().exists()
+        q.exists()
     });
     q.filter(fail.not());
     let total_instances = q.query(|q| {
         let instance = q.table(tables::Instance);
         q.filter(instance.problem.file_hash.eq(i64::from(problem_hash)));
-        q.group().count_distinct(instance)
+        q.count_distinct(instance)
     });
     let (max_fuel, count) = q.query(|q| {
         let exec = q.table(tables::Execution);
         q.filter_on(&exec.solution, &solution);
         q.filter(exec.instance.problem.file_hash.eq(i64::from(problem_hash)));
-        let group = &q.group();
-        (group.max(exec.fuel_used), group.count_distinct(exec))
+        (q.max(exec.fuel_used), q.count_distinct(exec))
     });
     q.filter(count.eq(total_instances));
-    let max_fuel = q.filter_some(max_fuel);
+    let max_fuel = q.filter_some(&max_fuel);
     SolutionForProblem { solution, max_fuel }
 }
 

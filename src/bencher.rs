@@ -31,7 +31,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                 let exec = q.table(tables::Execution);
                 q.filter_on(&exec.instance, &instance);
                 q.filter_on(&exec.solution, &solution);
-                q.group().exists()
+                q.exists()
             });
             // not executed yet
             q.filter(is_executed.not());
@@ -39,7 +39,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
             let fail = q.query(|q| {
                 let failure = q.table(tables::Failure);
                 q.filter_on(&failure.solution, &solution);
-                q.group().exists()
+                q.exists()
             });
             // has not failed
             q.filter(fail.not());

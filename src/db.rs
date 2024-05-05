@@ -18,13 +18,13 @@ impl ToSql for GithubId {
     }
 }
 
-pub fn get_file<'t>(q: &mut Query<'_, 't>, hash: FileHash) -> Db<'t, tables::File> {
+pub fn get_file<'t>(q: &mut Query<'t>, hash: FileHash) -> Db<'t, tables::File> {
     let file = q.table(tables::File);
     q.filter(file.file_hash.eq(i64::from(hash)));
     file
 }
 
-pub fn get_user<'t>(q: &mut Query<'_, 't>, github_id: GithubId) -> Db<'t, tables::User> {
+pub fn get_user<'t>(q: &mut Query<'t>, github_id: GithubId) -> Db<'t, tables::User> {
     let user = q.table(tables::User);
     q.filter(user.github_id.eq(github_id.0));
     user

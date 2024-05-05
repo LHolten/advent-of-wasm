@@ -57,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
             let count = q.query(|q| {
                 let instance = q.table(tables::Instance);
                 q.filter(instance.problem.file_hash.eq(i64::from(*file_hash)));
-                q.group().count_distinct(instance)
+                q.count_distinct(instance)
             });
             q.into_vec(1, |row| row.get(count))[0]
         });
