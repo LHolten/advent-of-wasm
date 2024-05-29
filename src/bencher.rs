@@ -1,13 +1,8 @@
-use rust_query::client::QueryBuilder;
 use rust_query::value::{UnixEpoch, Value};
 
-use crate::tables::{ExecutionDummy, FailureDummy, Instance};
-use crate::{
-    hash::FileHash,
-    solution::Solution,
-    tables::{self},
-    AppState,
-};
+use crate::async_sqlite::DB;
+use crate::migration::{ExecutionDummy, FailureDummy};
+use crate::{hash::FileHash, solution::Solution, AppState};
 
 struct QueuedTask {
     solution_hash: FileHash,
@@ -18,17 +13,17 @@ struct QueuedTask {
 pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
     loop {
         // wait for database state to change
-        app.conn.wait();
+        DB.wait();
         println!("querying the database for queue");
-        let conn = app.conn.lock();
+        let conn = DB.lock();
 
         let queue = conn.new_query(|q| {
-            let instance = q.table(tables::Instance);
-            let solution = q.table(tables::Solution);
+            let instance = q.table(&DB.instance);
+            let solution = q.table(&DB.solution);
             q.filter((&instance.problem).eq(&solution.problem));
 
             let is_executed = q.query(|q| {
-                let exec = q.table(tables::Execution);
+                let exec = q.table(&DB.execution);
                 q.filter_on(&exec.instance, &instance);
                 q.filter_on(&exec.solution, &solution);
                 q.exists()
@@ -37,7 +32,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
             q.filter(is_executed.not());
 
             let fail = q.query(|q| {
-                let failure = q.table(tables::Failure);
+                let failure = q.table(&DB.failure);
                 q.filter_on(&failure.solution, &solution);
                 q.exists()
             });
@@ -63,16 +58,16 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
 
             let res = solution.run(problem, task.instance_seed);
 
-            let conn = app.conn.lock();
+            let conn = DB.lock();
 
             match res {
                 Ok(fuel) => {
                     conn.new_query(|q| {
-                        let instance = q.table(Instance);
+                        let instance = q.table(&DB.instance);
                         q.filter(instance.problem.file_hash.eq(i64::from(task.problem_hash)));
                         q.filter(instance.seed.eq(task.instance_seed));
 
-                        let solution = q.table(tables::Solution);
+                        let solution = q.table(&DB.solution);
                         q.filter(solution.program.file_hash.eq(i64::from(task.solution_hash)));
                         q.filter(solution.problem.file_hash.eq(i64::from(task.problem_hash)));
 
@@ -86,7 +81,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                     });
                 }
                 Err(err) => conn.new_query(|q| {
-                    let solution = q.table(tables::Solution);
+                    let solution = q.table(&DB.solution);
                     q.filter(solution.program.file_hash.eq(i64::from(task.solution_hash)));
                     q.filter(solution.problem.file_hash.eq(i64::from(task.problem_hash)));
 

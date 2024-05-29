@@ -15,8 +15,6 @@ k12 = "0.2.1"
 maud = "0.26.0"
 oauth2 = "4.4.2"
 rand = "0.8.5"
-rusqlite = { version = "0.30.0" }
-rusqlite_migration = "1.0.1"
 serde = { version = "1.0.151", features = ["serde_derive"] }
 serde_json = "1.0.115"
 
@@ -24,9 +22,9 @@ tokio = { version = "1.23.0", features = ["full"] }
 toml = "0.5.10"
 wasmtime = { version = "19", default-features = false, features = ["cranelift", "runtime", "wat"] }
 
-rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "1650c1d" }
+rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "062701d" }
 reqwest = "0.12.3"
 
-[build-dependencies]
-rust-query = { git = "https://github.com/LHolten/rust-query.git", rev = "1650c1d" }
 
+[patch."https://github.com/LHolten/rust-query.git"]
+rust-query = { path = "../rust-orm" }

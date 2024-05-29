@@ -1,34 +1,42 @@
 use std::{
     ops::Deref,
-    sync::{Arc, Condvar, Mutex, MutexGuard},
+    sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard},
     thread,
 };
 
-use rusqlite::Connection;
+pub static DB: LazyLock<SharedConnection> = LazyLock::new(|| {
+    let (client, schema) = initialize_db();
+    SharedConnection::new(client, schema)
+});
+
+use rust_query::client::Client;
 use tokio::sync::{mpsc, oneshot};
 
-type CallFn = Box<dyn FnOnce(&mut Connection) + Send>;
+use crate::migration::{initialize_db, Schema};
 
-#[derive(Debug, Clone)]
+type CallFn = Box<dyn FnOnce(&mut Client) + Send>;
+
+#[derive(Clone)]
 pub struct SharedConnection {
     sender: mpsc::Sender<CallFn>,
     inner: Arc<Inner>,
 }
 
-#[derive(Debug)]
 pub struct Inner {
-    conn: Mutex<Connection>,
+    conn: Mutex<Client>,
     cvar: Condvar,
     updates: Mutex<bool>,
+    schema: Schema,
 }
 
 impl SharedConnection {
-    pub fn new(conn: Connection) -> Self {
+    pub fn new(conn: Client, schema: Schema) -> Self {
         let (sender, mut receiver) = mpsc::channel::<CallFn>(1);
         let inner = Arc::new(Inner {
             conn: Mutex::new(conn),
             cvar: Condvar::new(),
             updates: Mutex::new(true),
+            schema,
         });
         let res = Self {
             sender,
@@ -46,7 +54,7 @@ impl SharedConnection {
 
     pub async fn call<F, R>(&self, func: F) -> R
     where
-        F: FnOnce(&mut Connection) -> R + Send + 'static,
+        F: FnOnce(&mut Client) -> R + Send + 'static,
         R: Send + 'static,
     {
         let (sender, receiver) = oneshot::channel::<R>();
@@ -69,6 +77,14 @@ impl Deref for SharedConnection {
     }
 }
 
+impl Deref for Inner {
+    type Target = Schema;
+
+    fn deref(&self) -> &Self::Target {
+        &self.schema
+    }
+}
+
 impl Inner {
     // // this will not change updates
     // pub fn call_blocking<F, R>(&self, func: F) -> R
@@ -80,7 +96,7 @@ impl Inner {
     //     func(&mut conn)
     // }
 
-    pub fn lock(&self) -> MutexGuard<'_, Connection> {
+    pub fn lock(&self) -> MutexGuard<'_, Client> {
         self.conn.lock().unwrap()
     }
 

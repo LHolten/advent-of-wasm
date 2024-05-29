@@ -6,9 +6,8 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::{html, Markup, DOCTYPE};
-use rusqlite::Connection;
 
-use crate::{async_sqlite::SharedConnection, bencher::bencher_main, problem::ProblemDir, AppState};
+use crate::{bencher::bencher_main, problem::ProblemDir, AppState};
 
 use self::{
     problem::{get_problem, upload},
@@ -20,9 +19,8 @@ mod problem;
 mod problem_list;
 mod submission;
 
-pub async fn web_server(problem_dir: Arc<ProblemDir>, conn: Connection) -> anyhow::Result<()> {
-    let conn = SharedConnection::new(conn);
-    let app_state = AppState { problem_dir, conn };
+pub async fn web_server(problem_dir: Arc<ProblemDir>) -> anyhow::Result<()> {
+    let app_state = AppState { problem_dir };
 
     // build our application with a single route
     let app = Router::new()

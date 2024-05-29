@@ -1,6 +1,6 @@
 use std::fs;
 
-use axum::extract::{Query, State};
+use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::response::Redirect;
 use axum_extra::extract::{cookie::Cookie, CookieJar};
@@ -9,13 +9,12 @@ use oauth2::TokenResponse;
 use oauth2::{
     basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, TokenUrl,
 };
-use rust_query::client::QueryBuilder;
 use rust_query::value::UnixEpoch;
 use serde::Deserialize;
 
+use crate::async_sqlite::DB;
 use crate::db::GithubId;
-use crate::tables::UserDummy;
-use crate::AppState;
+use crate::migration::UserDummy;
 
 #[derive(Deserialize)]
 pub struct Auth {
@@ -56,7 +55,6 @@ fn make_client() -> BasicClient {
 }
 
 pub async fn redirect(
-    State(app): State<AppState>,
     Query(auth): Query<Auth>,
     mut jar: CookieJar,
 ) -> Result<(CookieJar, Redirect), String> {
@@ -77,7 +75,7 @@ pub async fn redirect(
         github_token.access_token().secret().to_string(),
     ));
     jar = jar.remove(Cookie::from("state"));
-    let github_id = safe_login(&app, &mut jar).await?;
+    let github_id = safe_login(&mut jar).await?;
     jar = jar.add(Cookie::new("github_id", (github_id.0 as u64).to_string()));
 
     Ok((jar, Redirect::to("/problem/decimal")))
@@ -102,7 +100,7 @@ pub async fn fast_login(jar: &CookieJar) -> Option<GithubId> {
     Some(GithubId(github_id as i64))
 }
 
-pub async fn safe_login(app: &AppState, jar: &mut CookieJar) -> Result<GithubId, String> {
+pub async fn safe_login(jar: &mut CookieJar) -> Result<GithubId, String> {
     let access_token = jar.get("access_token").ok_or("not logged in")?;
 
     let response = reqwest::Client::builder()
@@ -125,17 +123,16 @@ pub async fn safe_login(app: &AppState, jar: &mut CookieJar) -> Result<GithubId,
     let github_id = val.get("id").unwrap().as_u64().unwrap();
     let github_login = val.get("login").unwrap().as_str().unwrap().to_owned();
 
-    app.conn
-        .call(move |conn| {
-            conn.new_query(|q| {
-                q.insert(UserDummy {
-                    github_id: github_id as i64,
-                    github_login: github_login.as_str(),
-                    timestamp: UnixEpoch,
-                })
-            });
-        })
-        .await;
+    DB.call(move |conn| {
+        conn.new_query(|q| {
+            q.insert(UserDummy {
+                github_id: github_id as i64,
+                github_login: github_login.as_str(),
+                timestamp: UnixEpoch,
+            })
+        });
+    })
+    .await;
 
     Ok(GithubId(github_id as i64))
 }

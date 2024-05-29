@@ -6,23 +6,21 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::{html, PreEscaped};
-use rust_query::{
-    client::QueryBuilder,
-    value::{Db, UnixEpoch, Value},
-};
+use rust_query::value::{Db, UnixEpoch, Value};
 use serde::Deserialize;
 
 use crate::{
+    async_sqlite::DB,
     chart::{Axis, Grid, Root, Series, Title, Tooltip},
     db::{get_file, get_user},
     hash::{self, FileHash},
+    migration::{self, FileDummy, SolutionDummy, SubmissionDummy},
     pages::{
         header,
         login::{fast_login, safe_login},
         Location, ProblemPage,
     },
     solution::verify_wasm,
-    tables::{self, FileDummy, SolutionDummy, SubmissionDummy},
     AppState,
 };
 
@@ -59,8 +57,7 @@ pub async fn get_problem(
         let size: u64 = size.parse().map_err(|_| "could not parse size")?;
         let fuel: u64 = fuel.parse().map_err(|_| "could not parse fuel")?;
 
-        let hashes = app
-            .conn
+        let hashes = DB
             .call(move |conn| {
                 conn.new_query(|q| {
                     let sfp = solutions_for_problem(q, problem_hash);
@@ -82,14 +79,13 @@ pub async fn get_problem(
 
     let github_id = fast_login(&jar).await;
 
-    let data = app
-        .conn
+    let data = DB
         .call(move |conn| {
             // list solutions for this problem
             conn.new_query(|q| {
                 let sfp = solutions_for_problem(q, problem_hash);
                 let yours = q.query(|q| {
-                    let subm = q.table(tables::Submission);
+                    let subm = q.table(&DB.submission);
                     q.filter_on(&subm.solution, &sfp.solution.program);
                     if let Some(github_id) = github_id {
                         q.filter(subm.user.github_id.eq(github_id.0));
@@ -164,7 +160,7 @@ window.addEventListener('resize', function() {{
 }
 
 struct SolutionForProblem<'a> {
-    solution: Db<'a, tables::Solution>,
+    solution: Db<'a, migration::Solution>,
     max_fuel: Db<'a, i64>,
 }
 
@@ -172,21 +168,21 @@ fn solutions_for_problem<'a>(
     q: &mut rust_query::Query<'a>,
     problem_hash: FileHash,
 ) -> SolutionForProblem<'a> {
-    let solution = q.table(tables::Solution);
+    let solution = q.table(&DB.solution);
     q.filter(solution.problem.file_hash.eq(i64::from(problem_hash)));
     let fail = q.query(|q| {
-        let failures = q.table(tables::Failure);
+        let failures = q.table(&DB.failure);
         q.filter_on(&failures.solution, &solution);
         q.exists()
     });
     q.filter(fail.not());
     let total_instances = q.query(|q| {
-        let instance = q.table(tables::Instance);
+        let instance = q.table(&DB.instance);
         q.filter(instance.problem.file_hash.eq(i64::from(problem_hash)));
         q.count_distinct(instance)
     });
     let (max_fuel, count) = q.query(|q| {
-        let exec = q.table(tables::Execution);
+        let exec = q.table(&DB.execution);
         q.filter_on(&exec.solution, &solution);
         q.filter(exec.instance.problem.file_hash.eq(i64::from(problem_hash)));
         (q.max(exec.fuel_used), q.count_distinct(exec))
@@ -288,7 +284,7 @@ async fn inner_upload(
 ) -> Result<FileHash, String> {
     println!("got multipart");
 
-    let github_id = safe_login(&app, jar).await?;
+    let github_id = safe_login(jar).await?;
 
     let field = multipart.next_field().await.unwrap().unwrap();
     assert_eq!(field.name().unwrap(), "wasm");
@@ -306,36 +302,35 @@ async fn inner_upload(
 
     let problem_hash = app.problem_dir.mapping[file_name];
 
-    app.conn
-        .call(move |conn| {
-            conn.new_query(|q| {
-                q.insert(FileDummy {
-                    file_hash: i64::from(solution_hash),
-                    file_size: data_len as i64,
-                    timestamp: UnixEpoch,
-                })
-            });
-            conn.new_query(|q| {
-                let problem = get_file(q, problem_hash);
-                let program = get_file(q, solution_hash);
-                q.insert(SolutionDummy {
-                    timestamp: UnixEpoch,
-                    program,
-                    problem,
-                    random_tests: 0,
-                })
-            });
-            conn.new_query(|q| {
-                let solution = get_file(q, solution_hash);
-                let user = get_user(q, github_id);
-                q.insert(SubmissionDummy {
-                    solution,
-                    timestamp: UnixEpoch,
-                    user,
-                })
-            });
-        })
-        .await;
+    DB.call(move |conn| {
+        conn.new_query(|q| {
+            q.insert(FileDummy {
+                file_hash: i64::from(solution_hash),
+                file_size: data_len as i64,
+                timestamp: UnixEpoch,
+            })
+        });
+        conn.new_query(|q| {
+            let problem = get_file(q, problem_hash);
+            let program = get_file(q, solution_hash);
+            q.insert(SolutionDummy {
+                timestamp: UnixEpoch,
+                program,
+                problem,
+                random_tests: 0,
+            })
+        });
+        conn.new_query(|q| {
+            let solution = get_file(q, solution_hash);
+            let user = get_user(q, github_id);
+            q.insert(SubmissionDummy {
+                solution,
+                timestamp: UnixEpoch,
+                user,
+            })
+        });
+    })
+    .await;
 
     Ok(solution_hash)
 }

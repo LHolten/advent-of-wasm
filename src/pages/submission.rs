@@ -5,12 +5,13 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::html;
-use rust_query::{client::QueryBuilder, value::Value};
+use rust_query::value::Value;
 
 use crate::{
+    async_sqlite::DB,
     hash::FileHash,
     pages::{header, Location, ProblemPage},
-    tables, AppState,
+    AppState,
 };
 
 // information about a solution and its performance on a problem
@@ -33,12 +34,11 @@ pub async fn submission(
         fuel: i64,
     }
 
-    let data = app
-        .conn
+    let data = DB
         .call(move |conn| {
             // list solutions for this problem
             conn.new_query(|q| {
-                let exec = q.table(tables::Execution);
+                let exec = q.table(&DB.execution);
                 q.filter(exec.instance.problem.file_hash.eq(i64::from(problem_hash)));
                 q.filter(exec.solution.program.file_hash.eq(i64::from(solution_hash)));
                 q.into_vec(u32::MAX, |row| SolutionStats {
@@ -54,11 +54,10 @@ pub async fn submission(
         message: String,
     }
 
-    let failure = app
-        .conn
+    let failure = DB
         .call(move |conn| {
             conn.new_query(|q| {
-                let failure = q.table(tables::Failure);
+                let failure = q.table(&DB.failure);
                 let solution = &failure.solution;
                 q.filter(solution.program.file_hash.eq(i64::from(solution_hash)));
                 q.filter(solution.problem.file_hash.eq(i64::from(problem_hash)));
@@ -70,11 +69,10 @@ pub async fn submission(
         })
         .await;
 
-    let users = app
-        .conn
+    let users = DB
         .call(move |conn| {
             conn.new_query(|q| {
-                let submission = q.table(tables::Submission);
+                let submission = q.table(&DB.submission);
                 q.filter(submission.solution.file_hash.eq(i64::from(solution_hash)));
                 q.into_vec(u32::MAX, |row| {
                     // sort by timestamp
