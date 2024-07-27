@@ -24,7 +24,7 @@ pub async fn get_problem_list(
                 }
             }
             tbody {
-                @for problem in app.problem_dir.mapping.keys() {
+                @for problem in app.problem_dir.problems.keys() {
                     tr {
                         td { a href={"problem/"(problem)} { (problem) } }
                     }

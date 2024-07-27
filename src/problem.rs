@@ -12,18 +12,19 @@ pub struct Problem {
     pub file_name: ModulePath,
     pub leaderboard_instances: u32, // this is how many of the oldest instances need to be ran
     pub fuel_limit: u64,
+    pub original_file_hash: Option<FileHash>,
 }
 
 #[derive(Deserialize)]
 pub struct ProblemDir {
-    pub problems: HashMap<FileHash, Problem>,
-    pub mapping: HashMap<String, FileHash>,
+    pub problems: HashMap<String, Problem>,
+    // pub mapping: HashMap<String, FileHash>,
 }
 
 impl ProblemDir {
     #[throws(anyhow::Error)]
     pub fn new() -> Self {
-        let content = fs::read_to_string("config/problem.toml")?;
+        let content = fs::read_to_string("config/problem_v2.toml")?;
         toml::from_str(&content)?
     }
 }
