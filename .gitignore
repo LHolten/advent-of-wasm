@@ -5,3 +5,6 @@
 /solution
 *.db*
 */old
+node_modules
+dist
+.parcel-cache

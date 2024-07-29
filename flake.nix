@@ -31,19 +31,38 @@
           rustc = toolchain;
         };
 
-      in rec {
-        # For `nix build` & `nix run`:
-        defaultPackage = naersk'.buildPackage {
+        editor = pkgs.buildNpmPackage rec {
+          pname = "editor";
+          version = "1.0.0";
+
+          src = ./editor;
+
+          npmDepsHash = "sha256-NfOpXLoau0In/kTo2jJjgrgFqTOakNgjcPleFJ+YnpU=";
+
+          installPhase = "cp -r dist $out";
+        };
+
+        server = naersk'.buildPackage {
           nativeBuildInputs = with pkgs; [ pkg-config rustPlatform.bindgenHook ];
           buildInputs = with pkgs; [ openssl sqlite ];
           src = ./.;
         };
 
+        link_start = pkgs.writeShellScriptBin "start" ''
+          mkdir editor
+          rm editor/dist
+          ln -s ${editor} editor/dist
+          ${server}/bin/advent-of-wasm
+        '';
+      in {
+        # For `nix build` & `nix run`:
+        defaultPackage = server;
+
         nixosModules.default = { ... }: {
           systemd.services.advent-of-wasm = {
             wantedBy = [ "multi-user.target" ];
             serviceConfig = {
-              ExecStart = "${defaultPackage}/bin/advent-of-wasm";
+              ExecStart = "${link_start}/bin/start";
               User = "advent-of-wasm";
               Group = "advent-of-wasm";
               WorkingDirectory = "/var/lib/advent-of-wasm";
