@@ -1,0 +1,24 @@
+{
+  "name": "editor",
+  "version": "1.0.0",
+  "description": "editor for wasm game",
+  "source": "src/index.html",
+  "scripts": {
+    "start": "parcel",
+    "build": "parcel build --public-url /assets/"
+  },
+  "devDependencies": {
+    "@parcel/optimizer-data-url": "^2.12.0",
+    "@parcel/transformer-inline-string": "^2.12.0",
+    "parcel": "^2.12.0",
+    "path-browserify": "^1.0.1",
+    "process": "^0.11.10"
+  },
+  "dependencies": {
+    "monaco-editor": "^0.50.0",
+    "monaco-editor-textmate": "^4.0.0",
+    "monaco-textmate": "^3.0.1",
+    "onigasm": "^2.2.5",
+    "wabt": "^1.0.35"
+  }
+}

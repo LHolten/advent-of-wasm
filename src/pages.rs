@@ -6,6 +6,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::{html, Markup, DOCTYPE};
+use tower_http::services::{ServeDir, ServeFile};
 
 use crate::{bencher::bencher_main, problem::ProblemDir, AppState};
 
@@ -30,6 +31,14 @@ pub async fn web_server(problem_dir: Arc<ProblemDir>) -> anyhow::Result<()> {
         .route("/problem/:problem/:solution_hash", get(submission))
         .route("/login", get(login::login))
         .route("/redirect", get(login::redirect))
+        .nest_service(
+            "/problem/:problem/editor",
+            ServeFile::new("editor/dist/index.html"),
+        )
+        .nest_service(
+            "/assets",
+            ServeDir::new("editor/dist").append_index_html_on_directories(false),
+        )
         .with_state(app_state.clone());
 
     // start the bencher
