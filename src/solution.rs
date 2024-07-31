@@ -25,7 +25,7 @@ impl Solution {
         let solution = ModulePath(path.into()).load(&solution_engine).unwrap();
 
         let limits = StoreLimitsBuilder::new()
-            .memory_size(problem.page_limit)
+            .memory_size(problem.page_limit * 64 * 1024)
             .build();
         let mut store = Store::new(&solution_engine, limits);
 
