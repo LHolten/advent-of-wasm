@@ -3,7 +3,10 @@ use std::{ffi::CStr, str::from_utf8};
 use anyhow::{anyhow, bail};
 use fehler::{throw, throws};
 
-use wasmtime::{Caller, Config, Engine, Instance, Linker, Module, Store, Trap, Val};
+use wasmtime::{
+    Caller, Config, Engine, Instance, Linker, Module, Store, StoreLimits, StoreLimitsBuilder, Trap,
+    Val,
+};
 
 use crate::{
     hash::FileHash,
@@ -21,10 +24,15 @@ impl Solution {
         let path = format!("solution/{}.wasm", &self.hash);
         let solution = ModulePath(path.into()).load(&solution_engine).unwrap();
 
+        let limits = StoreLimitsBuilder::new()
+            .memory_size(problem.page_limit)
+            .build();
+        let mut store = Store::new(&solution_engine, limits);
+
         // first instantiate, this calls optional start
         // add some fuel here so the program can run
-        let mut store = Store::new(&solution_engine, ());
         store.set_fuel(problem.fuel_limit).unwrap();
+        store.limiter(|limits| limits);
         let solution = Linker::new(&solution_engine)
             .instantiate(&mut store, &solution)
             .map_err(|e| format!("{e:?}"))?;
@@ -68,7 +76,7 @@ impl Solution {
 }
 
 struct Data {
-    store: Store<()>,
+    store: Store<StoreLimits>,
     solution: Instance,
     stack: Vec<Val>,
     used_heap_base: bool,
@@ -219,8 +227,10 @@ mod tests {
 
         let solution = Module::from_file(&engine, "fast.wasm").unwrap();
         let linker = Linker::new(&engine);
-        let mut store = Store::new(&engine, ());
+        let limits = StoreLimitsBuilder::new().memory_size(1).build();
+        let mut store = Store::new(&engine, limits);
         store.set_fuel(3000).unwrap();
+        store.limiter(|x| x);
 
         Data {
             solution: linker.instantiate(&mut store, &solution).unwrap(),

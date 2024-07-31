@@ -12,6 +12,7 @@ pub struct Problem {
     pub file_name: ModulePath,
     pub leaderboard_instances: u32, // this is how many of the oldest instances need to be ran
     pub fuel_limit: u64,
+    pub page_limit: usize,
     pub original_file_hash: Option<FileHash>,
 }
 
