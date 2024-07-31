@@ -300,3 +300,15 @@ pub async fn upload(
         "/problem/{problem_name}/{solution_hash}"
     )))
 }
+
+pub async fn get_template(Path(problem_name): Path<String>) -> Result<String, String> {
+    // Check that this is a problem name.
+    // Otherwise we need to sanitize it.
+    db::get_problem(&problem_name)?;
+
+    fs::read_to_string(format!("template/{problem_name}.wat")).map_err(|_| {
+        format!(
+            ";; No template available yet for problem {problem_name}.\n;; Delete this text and refresh to try again."
+        )
+    })
+}
