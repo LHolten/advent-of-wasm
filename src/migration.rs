@@ -1,7 +1,7 @@
 use std::sync::LazyLock;
 
 use crate::problem::ProblemDir;
-use rust_query::{schema, Client, SharedClient};
+use rust_query::{schema, Client};
 
 #[schema]
 #[version(1..4)]
@@ -118,12 +118,9 @@ pub fn initialize_db() -> (Client, Schema) {
     (m.finish(), s.unwrap())
 }
 
-static BOTH: LazyLock<(SharedClient, Schema)> = LazyLock::new(|| {
-    let (client, schema) = initialize_db();
-    (SharedClient::new(client), schema)
-});
+static BOTH: LazyLock<(Client, Schema)> = LazyLock::new(initialize_db);
 
-pub static DB: LazyLock<&SharedClient> = LazyLock::new(|| &BOTH.0);
+pub static DB: LazyLock<&Client> = LazyLock::new(|| &BOTH.0);
 pub static TABLES: LazyLock<&Schema> = LazyLock::new(|| &BOTH.1);
 
 // Test that migrations are working

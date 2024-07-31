@@ -1,13 +1,7 @@
-use rust_query::{Just, UnixEpoch, Value};
+use rust_query::{UnixEpoch, Value};
 
-use crate::migration::{ExecutionDummy, FailureDummy, Instance, Solution, DB, TABLES};
+use crate::migration::{ExecutionDummy, FailureDummy, DB, TABLES};
 use crate::AppState;
-
-struct QueuedTask<'a> {
-    instance: Just<'a, Instance>,
-    solution: Just<'a, Solution>,
-    problem_name: String,
-}
 
 pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
     loop {
@@ -15,7 +9,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
         DB.wait();
         println!("querying the database for queue");
 
-        let queue = DB.exec(|q| {
+        let updated = DB.exec(|q| {
             let instance = q.table(&TABLES.instance);
             let solution = q.table(&TABLES.solution);
             q.filter(instance.problem().eq(solution.problem()));
@@ -37,45 +31,40 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
             // has not failed
             q.filter(fail.not());
 
-            q.into_vec(|row| QueuedTask {
-                instance: row.get(instance),
-                solution: row.get(solution),
-                problem_name: row.get(instance.problem().name()),
+            q.into_vec(|row| {
+                let solution_obj = crate::solution::Solution {
+                    hash: row.get(solution.program().file_hash()).into(),
+                };
+                let problem_name = row.get(solution.problem().name());
+                let problem = &app.problem_dir.problems[&problem_name];
+
+                let instance_seed = row.get(instance.seed());
+                let res = solution_obj.run(problem, instance_seed);
+
+                match res {
+                    Ok(fuel) => {
+                        DB.try_insert(ExecutionDummy {
+                            answer: None::<i64>,
+                            fuel_used: fuel as i64,
+                            instance: row.get(instance),
+                            solution: row.get(solution),
+                            timestamp: UnixEpoch,
+                        })
+                        .unwrap();
+                    }
+                    Err(err) => {
+                        DB.try_insert(FailureDummy {
+                            seed: instance_seed,
+                            solution: row.get(solution),
+                            timestamp: UnixEpoch,
+                            message: err.as_str(),
+                        })
+                        .unwrap();
+                    }
+                }
             })
         });
 
-        println!("{} new tasks queued", queue.len());
-
-        for task in queue {
-            let solution = crate::solution::Solution {
-                hash: DB.get(task.solution.program().file_hash()).into(),
-            };
-            let problem = &app.problem_dir.problems[&task.problem_name];
-
-            let instance_seed = DB.get(task.instance.seed());
-            let res = solution.run(problem, instance_seed);
-
-            match res {
-                Ok(fuel) => {
-                    DB.try_insert(ExecutionDummy {
-                        answer: None::<i64>,
-                        fuel_used: fuel as i64,
-                        instance: task.instance,
-                        solution: task.solution,
-                        timestamp: UnixEpoch,
-                    })
-                    .unwrap();
-                }
-                Err(err) => {
-                    DB.try_insert(FailureDummy {
-                        seed: instance_seed,
-                        solution: task.solution,
-                        timestamp: UnixEpoch,
-                        message: err.as_str(),
-                    })
-                    .unwrap();
-                }
-            }
-        }
+        println!("updated: {}", updated.len());
     }
 }
