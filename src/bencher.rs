@@ -53,13 +53,13 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                         .unwrap();
                     }
                     Err(err) => {
+                        // there might already be a failure, so we can fail to insert.
                         DB.try_insert(FailureDummy {
                             seed: instance_seed,
                             solution: row.get(solution),
                             timestamp: UnixEpoch,
                             message: err.as_str(),
-                        })
-                        .unwrap();
+                        });
                     }
                 }
             })
