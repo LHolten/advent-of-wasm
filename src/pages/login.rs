@@ -1,6 +1,6 @@
 use std::fs;
 
-use axum::extract::Query;
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::Redirect;
 use axum_extra::extract::{cookie::Cookie, CookieJar};
@@ -13,7 +13,8 @@ use rust_query::UnixEpoch;
 use serde::Deserialize;
 
 use crate::db::GithubId;
-use crate::migration::{UserDummy, DB};
+use crate::migration::UserDummy;
+use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct Auth {
@@ -54,6 +55,7 @@ fn make_client() -> BasicClient {
 }
 
 pub async fn redirect(
+    app: State<AppState>,
     Query(auth): Query<Auth>,
     mut jar: CookieJar,
 ) -> Result<(CookieJar, Redirect), String> {
@@ -74,7 +76,7 @@ pub async fn redirect(
         github_token.access_token().secret().to_string(),
     ));
     jar = jar.remove(Cookie::from("state"));
-    let github_id = safe_login(&mut jar).await?;
+    let github_id = safe_login(&mut jar, &app).await?;
     jar = jar.add(Cookie::new("github_id", (github_id.0 as u64).to_string()));
 
     Ok((jar, Redirect::to("/problem/decimal")))
@@ -99,7 +101,7 @@ pub async fn fast_login(jar: &CookieJar) -> Option<GithubId> {
     Some(GithubId(github_id as i64))
 }
 
-pub async fn safe_login(jar: &mut CookieJar) -> Result<GithubId, String> {
+pub async fn safe_login(jar: &mut CookieJar, app: &AppState) -> Result<GithubId, String> {
     let access_token = jar.get("access_token").ok_or("not logged in")?;
 
     let response = reqwest::Client::builder()
@@ -122,10 +124,15 @@ pub async fn safe_login(jar: &mut CookieJar) -> Result<GithubId, String> {
     let github_id = val.get("id").unwrap().as_u64().unwrap();
     let github_login = val.get("login").unwrap().as_str().unwrap().to_owned();
 
-    DB.try_insert(UserDummy {
-        github_id: github_id as i64,
-        github_login: github_login.as_str(),
-        timestamp: UnixEpoch,
+    app.write_transaction(move |mut db| {
+        db.try_insert(UserDummy {
+            github_id: github_id as i64,
+            github_login: github_login.as_str(),
+            timestamp: UnixEpoch,
+        });
+
+        db.commit()
     });
+
     Ok(GithubId(github_id as i64))
 }

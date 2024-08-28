@@ -1,70 +1,83 @@
-use rust_query::{UnixEpoch, Value};
+use rust_query::{Free, FromRow, UnixEpoch, Value};
 
-use crate::migration::{ExecutionDummy, FailureDummy, DB, TABLES};
+use crate::migration::{Execution, ExecutionDummy, Failure, FailureDummy, Instance, Solution};
 use crate::AppState;
+
+#[derive(FromRow)]
+struct NeedsBench<'a> {
+    program_hash: i64,
+    problem_name: String,
+    seed: i64,
+    instance: Free<'a, Instance>,
+    solution: Free<'a, Solution>,
+}
 
 pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
     loop {
         // wait for database state to change
-        DB.wait();
+        *app.watcher
+            .wait_while(app.updated.lock().unwrap(), |updated| !*updated)
+            .unwrap() = false;
+
         println!("querying the database for queue");
 
-        let updated = DB.exec(|q| {
-            let instance = q.table(&TABLES.instance);
-            let solution = q.table(&TABLES.solution);
-            q.filter(instance.problem().eq(solution.problem()));
+        app.write_transaction(|mut db| {
+            let needs_bench = db.exec(|q| {
+                let instance = Instance::join(q);
+                let solution = Solution::join(q);
+                q.filter(instance.problem().eq(solution.problem()));
 
-            let is_executed = q.query(|q| {
-                let exec = q.table(&TABLES.execution);
-                q.filter_on(exec.instance(), instance);
-                q.filter_on(exec.solution(), solution);
-                q.exists()
+                let is_executed = Execution::unique(instance, solution).not_null();
+                // not executed yet
+                q.filter(is_executed.not());
+
+                let fail = Failure::unique(solution).not_null();
+                // has not failed
+                q.filter(fail.not());
+
+                q.into_vec(NeedsBenchDummy {
+                    program_hash: solution.program().file_hash(),
+                    problem_name: solution.problem().name(),
+                    seed: instance.seed(),
+                    instance,
+                    solution,
+                })
             });
-            // not executed yet
-            q.filter(is_executed.not());
 
-            let fail = q.query(|q| {
-                let failure = q.table(&TABLES.failure);
-                q.filter_on(failure.solution(), solution);
-                q.exists()
-            });
-            // has not failed
-            q.filter(fail.not());
-
-            q.into_vec(|row| {
+            for item in &needs_bench {
                 let solution_obj = crate::solution::Solution {
-                    hash: row.get(solution.program().file_hash()).into(),
+                    hash: item.program_hash.into(),
                 };
-                let problem_name = row.get(solution.problem().name());
-                let problem = &app.problem_dir.problems[&problem_name];
+                let problem = &app.problem_dir.problems[&item.problem_name];
 
-                let instance_seed = row.get(instance.seed());
-                let res = solution_obj.run(problem, instance_seed);
+                let res = solution_obj.run(problem, item.seed);
 
                 match res {
                     Ok(fuel) => {
-                        DB.try_insert(ExecutionDummy {
+                        db.try_insert(ExecutionDummy {
                             answer: None::<i64>,
                             fuel_used: fuel as i64,
-                            instance: row.get(instance),
-                            solution: row.get(solution),
+                            instance: item.instance,
+                            solution: item.solution,
                             timestamp: UnixEpoch,
                         })
                         .unwrap();
                     }
                     Err(err) => {
                         // there might already be a failure, so we can fail to insert.
-                        DB.try_insert(FailureDummy {
-                            seed: instance_seed,
-                            solution: row.get(solution),
+                        db.try_insert(FailureDummy {
+                            seed: item.seed,
+                            solution: item.solution,
                             timestamp: UnixEpoch,
                             message: err.as_str(),
                         });
                     }
                 }
-            })
-        });
+            }
 
-        println!("updated: {}", updated.len());
+            println!("updated: {}", needs_bench.len());
+
+            db.commit();
+        });
     }
 }

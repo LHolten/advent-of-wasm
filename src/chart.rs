@@ -81,7 +81,7 @@ pub enum Series {
         // area_style: AreaStyle,
     },
     Scatter {
-        data: Vec<[u64; 2]>,
+        data: Vec<[i64; 2]>,
         // tooltip: Tooltip,
     },
 }

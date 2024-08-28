@@ -1,4 +1,4 @@
-use std::{sync::Arc, thread};
+use std::thread;
 
 use axum::{
     routing::{get, post},
@@ -9,7 +9,7 @@ use maud::{html, Markup, DOCTYPE};
 use problem::get_template;
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::{bencher::bencher_main, problem::ProblemDir, AppState};
+use crate::{bencher::bencher_main, AppState};
 
 use self::{
     problem::{get_problem, upload},
@@ -21,9 +21,7 @@ mod problem;
 mod problem_list;
 mod submission;
 
-pub async fn web_server(problem_dir: Arc<ProblemDir>) -> anyhow::Result<()> {
-    let app_state = AppState { problem_dir };
-
+pub async fn web_server(app_state: AppState) -> anyhow::Result<()> {
     // build our application with a single route
     let app = Router::new()
         .route("/problem", get(problem_list::get_problem_list))

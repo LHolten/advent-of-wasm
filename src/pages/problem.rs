@@ -1,14 +1,14 @@
 use std::fs;
 
 use axum::{
-    extract::{Multipart, Path, Query},
+    extract::{Multipart, Path, Query, State},
     response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::CookieJar;
 use maud::{html, PreEscaped};
 use rust_query::{
-    ops::{Assume, Col},
-    Covariant, Db, UnixEpoch, Value,
+    ops::{Aggr, Assume, Col, Db},
+    FromRow, UnixEpoch, Value,
 };
 use serde::Deserialize;
 
@@ -16,13 +16,17 @@ use crate::{
     chart::{Axis, Grid, Root, Series, Title, Tooltip},
     db,
     hash::{self, FileHash},
-    migration::{FileDummy, Problem, Solution, SolutionDummy, SubmissionDummy, DB, TABLES},
+    migration::{
+        Execution, Failure, File, FileDummy, Instance, Problem, Schema, Solution, SolutionDummy,
+        Submission, SubmissionDummy, User,
+    },
     pages::{
         header,
         login::{fast_login, safe_login},
         Location, ProblemPage,
     },
     solution::verify_wasm,
+    AppState,
 };
 
 #[derive(Deserialize)]
@@ -30,141 +34,153 @@ pub struct SolutionQuery {
     score: Option<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, FromRow)]
 struct SolutionStats {
-    name: String,
-    max_fuel: u64,
-    file_size: u64,
+    file_hash: i64,
+    max_fuel: i64,
+    file_size: i64,
     yours: bool,
 }
 
+impl SolutionStats {
+    pub fn name(&self) -> String {
+        FileHash::from(self.file_hash).to_string()
+    }
+}
+
 pub async fn get_problem(
+    app: State<AppState>,
     Path(problem_name): Path<String>,
     jar: CookieJar,
     Query(query): Query<SolutionQuery>,
 ) -> Result<Response, String> {
     println!("got user for {problem_name}");
 
-    let problem = db::get_problem(&problem_name)?;
-
-    if let Some(score) = query.score {
-        let (size, fuel) = score.split_once(',').ok_or("expected two part score")?;
-        let size: u64 = size.parse().map_err(|_| "could not parse size")?;
-        let fuel: u64 = fuel.parse().map_err(|_| "could not parse fuel")?;
-
-        let hashes = DB.exec(|q| {
-            let sfp = solutions_for_problem(q, problem);
-            q.filter(sfp.solution.program().file_size().eq(size as i64));
-            q.filter(sfp.max_fuel.eq(fuel as i64));
-            q.into_vec(|row| FileHash::from(row.get(sfp.solution.program().file_hash())))
-        });
-        if hashes.len() == 1 {
-            let target = format!("{problem_name}/{}", &hashes[0]);
-            return Ok(Redirect::to(&target).into_response());
-        } else {
-            return Err("there are multiple solutions with that score".to_owned());
-        }
-    }
-
     let github_id = fast_login(&jar).await;
 
-    let data = DB.exec(|q| {
-        let sfp = solutions_for_problem(q, problem);
-        let yours = q.query(|q| {
-            let subm = q.table(&TABLES.submission);
-            q.filter_on(subm.solution(), sfp.solution.program());
-            if let Some(github_id) = github_id {
-                q.filter(subm.user().github_id().eq(github_id.0));
+    app.read_transaction(move |db|{
+        let problem = db::get_problem(&db, &problem_name)?;
+
+        if let Some(score) = query.score {
+            let (size, fuel) = score.split_once(',').ok_or("expected two part score")?;
+            let size: u64 = size.parse().map_err(|_| "could not parse size")?;
+            let fuel: u64 = fuel.parse().map_err(|_| "could not parse fuel")?;
+
+            let hashes: Vec<_> = db.exec(|q| {
+                let sfp = solutions_for_problem(q, problem);
+                q.filter(sfp.solution.program().file_size().eq(size as i64));
+                q.filter(sfp.max_fuel.eq(fuel as i64));
+                q.into_vec(sfp.solution.program().file_hash())
+                    .into_iter()
+                    .map(|row| FileHash::from(row))
+                    .collect()
+            });
+            if hashes.len() == 1 {
+                let target = format!("{problem_name}/{}", &hashes[0]);
+                return Ok(Redirect::to(&target).into_response());
             } else {
-                q.filter(false);
+                return Err("there are multiple solutions with that score".to_owned());
             }
-            q.exists()
+        }
+
+        let data = db.exec(|q| {
+            let sfp = solutions_for_problem(q, problem);
+            let yours = q.aggregate(|q| {
+                let subm = Submission::join(q);
+                q.filter_on(subm.solution(), sfp.solution.program());
+                if let Some(github_id) = github_id {
+                    q.filter(subm.user().github_id().eq(github_id.0));
+                } else {
+                    q.filter(false);
+                }
+                q.exists()
+            });
+
+            q.into_vec(SolutionStatsDummy {
+                file_size: sfp.solution.program().file_size(),
+                file_hash: sfp.solution.program().file_hash(),
+                max_fuel: sfp.max_fuel,
+                yours,
+            })
         });
 
-        q.into_vec(|row| SolutionStats {
-            file_size: row.get(sfp.solution.program().file_size()) as u64,
-            name: FileHash::from(row.get(sfp.solution.program().file_hash())).to_string(),
-            max_fuel: row.get(sfp.max_fuel) as u64,
-            yours: row.get(yours),
-        })
-    });
+        let chart_data = graph(&data);
 
-    let chart_data = graph(&data);
+        let js = format!(
+            "
+    var chart = echarts.init(document.getElementById('chart'), null, {{ renderer: 'canvas' }});
+    chart.setOption({});
+    chart.on('click', 'series', function(params) {{
+        window.location.href = '?score=' + params.value;
+    }});
+    window.addEventListener('resize', function() {{
+      chart.resize();
+    }});
+        ",
+            serde_json::to_string(&chart_data).unwrap()
+        );
 
-    let js = format!(
-        "
-var chart = echarts.init(document.getElementById('chart'), null, {{ renderer: 'canvas' }});
-chart.setOption({});
-chart.on('click', 'series', function(params) {{
-    window.location.href = '?score=' + params.value;
-}});
-window.addEventListener('resize', function() {{
-  chart.resize();
-}});
-    ",
-        serde_json::to_string(&chart_data).unwrap()
-    );
-
-    let location = Location::Problem(problem_name.clone(), ProblemPage::Home);
-    let res = html! {
-        table {
-            // caption { "Scores" }
-            thead {
-                tr {
-                    th { "Solution" }
-                    th { "File Size" }
-                    th { "Max Fuel" }
-                }
-            }
-            tbody {
-                @for solution in &data {
+        let location = Location::Problem(problem_name.clone(), ProblemPage::Home);
+        let res = html! {
+            table {
+                // caption { "Scores" }
+                thead {
                     tr {
-                        td { a href={(problem_name)"/"(solution.name)} { code{(solution.name)}} }
-                        td {(solution.file_size)}
-                        td {(solution.max_fuel)}
+                        th { "Solution" }
+                        th { "File Size" }
+                        th { "Max Fuel" }
+                    }
+                }
+                tbody {
+                    @for solution in &data {
+                        tr {
+                            td { a href={(problem_name)"/"(solution.name())} { code{(solution.name())}} }
+                            td {(solution.file_size)}
+                            td {(solution.max_fuel)}
+                        }
                     }
                 }
             }
-        }
 
-        div id="chart" style="height: 500px" {}
-        script type="text/javascript" {(PreEscaped(js))}
+            div id="chart" style="height: 500px" {}
+            script type="text/javascript" {(PreEscaped(js))}
 
-        form method="post" enctype="multipart/form-data" {
-            fieldset {
-                legend { "Submit a new program" }
-                aside { "Make sure to upload a " code {".wasm"} " file" }
-                input type="file" name="wasm";
-                button { "Submit!" };
+            form method="post" enctype="multipart/form-data" {
+                fieldset {
+                    legend { "Submit a new program" }
+                    aside { "Make sure to upload a " code {".wasm"} " file" }
+                    input type="file" name="wasm";
+                    button { "Submit!" };
+                }
             }
-        }
-    };
-    let res = header(location, &jar, res);
-    Ok(Html(res.into_string()).into_response())
+        };
+        let res = header(location, &jar, res);
+        Ok(Html(res.into_string()).into_response())
+    })
 }
 
 struct SolutionForProblem<'a> {
-    solution: Col<Solution, Db<'a, Solution>>,
-    max_fuel: Assume<Col<Option<i64>, Db<'a, Option<i64>>>>,
+    solution: Db<'a, Solution>,
+    max_fuel: Assume<Col<Option<i64>, Aggr<'a, Schema>>>,
 }
 
 fn solutions_for_problem<'a>(
-    q: &mut rust_query::Query<'a>,
-    problem: impl Covariant<'a, Typ = Problem> + Copy,
+    q: &mut rust_query::Query<'a, Schema>,
+    problem: impl for<'x> Value<'x, Schema, Typ = Problem> + Copy,
 ) -> SolutionForProblem<'a> {
-    let solution = q.table(&TABLES.solution);
+    let solution = Solution::join(q);
     q.filter(solution.problem().eq(problem));
-    let fail = TABLES.failure.unique(solution).is_not_null();
+    let fail = Failure::unique(solution).not_null();
     q.filter(fail.not());
-    let total_instances = q.query(|q| {
-        let instance = q.table(&TABLES.instance);
-        q.filter(instance.problem().eq(problem.weaken()));
+    let total_instances = q.aggregate(|q| {
+        let instance = Instance::join(q);
+        q.filter(instance.problem().eq(problem));
         q.count_distinct(instance)
     });
-    let (max_fuel, count) = q.query(|q| {
-        let exec = q.table(&TABLES.execution);
+    let (max_fuel, count) = q.aggregate(|q| {
+        let exec = Execution::join(q);
         q.filter_on(exec.solution(), solution);
-        q.filter(exec.instance().problem().eq(problem.weaken()));
+        q.filter(exec.instance().problem().eq(problem));
         (q.max(exec.fuel_used()), q.count_distinct(exec))
     });
     q.filter(count.eq(total_instances));
@@ -181,7 +197,7 @@ fn pareto(data: &[SolutionStats]) -> Vec<[u64; 2]> {
             // check that all smaller solutions are slower
             data.iter().take(*i).all(|x| x.max_fuel > sol.max_fuel)
         })
-        .map(|(_i, data)| [data.file_size, data.max_fuel])
+        .map(|(_i, data)| [data.file_size as u64, data.max_fuel as u64])
         .collect();
     const MAX: u64 = 513;
     let min_size = tmp.iter().map(|d| d[0]).min().unwrap_or(MAX);
@@ -245,15 +261,14 @@ fn graph(data: &[SolutionStats]) -> Root {
 }
 
 pub async fn upload(
+    app: State<AppState>,
     Path(problem_name): Path<String>,
     mut jar: CookieJar,
     mut multipart: Multipart,
 ) -> Result<Redirect, String> {
-    let problem = db::get_problem(&problem_name)?;
-
     println!("got multipart");
 
-    let github_id = safe_login(&mut jar).await?;
+    let github_id = safe_login(&mut jar, &app).await?;
 
     let Some(field) = multipart.next_field().await.map_err(|e| e.to_string())? else {
         return Err("expected multipart field".to_owned());
@@ -273,42 +288,52 @@ pub async fn upload(
     let path = format!("solution/{solution_hash}.wasm");
     fs::write(path, data).unwrap();
 
-    DB.try_insert(FileDummy {
-        file_hash: i64::from(solution_hash),
-        file_size: data_len as i64,
-        timestamp: UnixEpoch,
-    });
-    let program = DB
-        .get(TABLES.file.unique(i64::from(solution_hash)))
-        .unwrap();
+    app.write_transaction(|mut db| {
+        let problem = db::get_problem(&db, &problem_name)?;
 
-    DB.try_insert(SolutionDummy {
-        program,
-        problem,
-        random_tests: 0,
-        timestamp: UnixEpoch,
-    });
+        db.try_insert(FileDummy {
+            file_hash: i64::from(solution_hash),
+            file_size: data_len as i64,
+            timestamp: UnixEpoch,
+        });
+        let program = db.get(File::unique(i64::from(solution_hash))).unwrap();
 
-    let user = DB.get(TABLES.user.unique(github_id.0)).unwrap();
-    DB.try_insert(SubmissionDummy {
-        solution: program,
-        user,
-        timestamp: UnixEpoch,
-    });
+        db.try_insert(SolutionDummy {
+            program,
+            problem,
+            random_tests: 0,
+            timestamp: UnixEpoch,
+        });
 
-    Ok(Redirect::to(&format!(
-        "/problem/{problem_name}/{solution_hash}"
-    )))
+        let user = db.get(User::unique(github_id.0)).unwrap();
+        db.try_insert(SubmissionDummy {
+            solution: program,
+            user,
+            timestamp: UnixEpoch,
+        });
+
+        db.commit();
+
+        Ok(Redirect::to(&format!(
+            "/problem/{problem_name}/{solution_hash}"
+        )))
+    })
 }
 
-pub async fn get_template(Path(problem_name): Path<String>) -> Result<String, String> {
-    // Check that this is a problem name.
-    // Otherwise we need to sanitize it.
-    db::get_problem(&problem_name)?;
+pub async fn get_template(
+    app: State<AppState>,
+    Path(problem_name): Path<String>,
+) -> Result<String, String> {
+    app.read_transaction(move |db| {
+        // Check that this is a problem name.
+        // Otherwise we need to sanitize it.
+        db::get_problem(&db, &problem_name)?;
 
-    fs::read_to_string(format!("template/{problem_name}.wat")).map_err(|_| {
-        format!(
-            ";; No template available yet for problem {problem_name}.\n;; Delete this text and refresh to try again."
-        )
+        fs::read_to_string(format!("template/{problem_name}.wat")).map_err(|_| {
+            format!(
+                ";; No template available yet for problem {problem_name}.
+;; Delete this text and refresh to try again."
+            )
+        })
     })
 }

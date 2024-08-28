@@ -1,11 +1,14 @@
-use rust_query::Just;
+use rust_query::{Free, ReadTransaction};
 
-use crate::migration::{Problem, DB, TABLES};
+use crate::migration::{Problem, Schema};
 
 #[derive(Clone, Copy)]
 pub struct GithubId(pub i64);
 
-pub fn get_problem(problem_name: &str) -> Result<Just<'static, Problem>, &'static str> {
-    DB.get(TABLES.problem.unique(&problem_name))
+pub fn get_problem<'a>(
+    db: &ReadTransaction<'a, Schema>,
+    problem_name: &str,
+) -> Result<Free<'a, Problem>, &'static str> {
+    db.get(Problem::unique(problem_name))
         .ok_or("could not find problem")
 }

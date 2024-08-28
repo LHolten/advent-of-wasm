@@ -1,7 +1,8 @@
-use std::sync::LazyLock;
-
 use crate::problem::ProblemDir;
-use rust_query::{schema, Client};
+use rust_query::{
+    migration::{schema, Prepare},
+    Database, ThreadToken,
+};
 
 #[schema]
 #[version(1..4)]
@@ -81,13 +82,13 @@ enum Schema {
 
 pub use v3::*;
 
-pub fn initialize_db() -> (Client, Schema) {
+pub fn initialize_db(t: &mut ThreadToken) -> Database<Schema> {
     let problem_dir = ProblemDir::new().unwrap();
 
-    let prepare = rust_query::Prepare::open("test.db");
+    let prepare = Prepare::open("test.db");
     // TODO: add trait constraints to migration types
-    let (mut m, s) = prepare.create_db_empty();
-    let s = m.migrate(s, |_s, c| v2::up::Schema {
+    let m = prepare.create_db_empty().unwrap();
+    let m = m.migrate(t, |c| v2::up::Schema {
         problem: Box::new(|file| {
             let hash = c.get(file.file_hash()).into();
             let problem = problem_dir
@@ -96,37 +97,32 @@ pub fn initialize_db() -> (Client, Schema) {
                 .find(|x| x.1.original_file_hash == Some(hash));
 
             problem.map(|(problem_name, _)| v2::up::ProblemMigration {
-                name: problem_name,
+                name: problem_name.as_str(),
                 timestamp: file.timestamp(),
                 original: file,
             })
         }),
     });
-    let s = m.migrate(s, |s, c| v3::up::Schema {
+    let m = m.migrate(t, |c| v3::up::Schema {
         problem: Box::new(|_problem| v3::up::ProblemMigration {}),
         instance: Box::new(|instance| v3::up::InstanceMigration {
             problem: c
-                .get(s.problem.unique_original(instance.problem()))
+                .get(v2::Problem::unique_original(instance.problem()))
                 .unwrap(),
         }),
         solution: Box::new(|solution| v3::up::SolutionMigration {
             problem: c
-                .get(s.problem.unique_original(solution.problem()))
+                .get(v2::Problem::unique_original(solution.problem()))
                 .unwrap(),
         }),
     });
-    (m.finish(), s.unwrap())
+    m.finish(t).unwrap()
 }
-
-static BOTH: LazyLock<(Client, Schema)> = LazyLock::new(initialize_db);
-
-pub static DB: LazyLock<&Client> = LazyLock::new(|| &BOTH.0);
-pub static TABLES: LazyLock<&Schema> = LazyLock::new(|| &BOTH.1);
 
 // Test that migrations are working
 #[cfg(test)]
 mod tests {
-    use rust_query::expect;
+    use rust_query::migration::expect;
 
     use super::*;
 
