@@ -38,6 +38,7 @@ pub struct AppStateInner {
 }
 
 impl AppState {
+    /// Don't forget to commit!
     pub fn write_transaction<F, R>(&self, f: F) -> R
     where
         F: FnOnce(WriteTransaction<'_, Schema>) -> R,
@@ -49,19 +50,20 @@ impl AppState {
         })
     }
 
-    /// Don't forget to commit!
     pub fn read_transaction<F, R>(&self, f: F) -> R
     where
         F: FnOnce(ReadTransaction<'_, Schema>) -> R,
     {
-        let res = tokio::task::block_in_place(|| {
+        tokio::task::block_in_place(|| {
             let mut token = ThreadToken::try_new().unwrap();
             let transaction = self.database.read(&mut token);
             f(transaction)
-        });
+        })
+    }
+
+    pub fn request_bench(&self) {
         *self.updated.lock().unwrap() = true;
         self.watcher.notify_all();
-        res
     }
 }
 

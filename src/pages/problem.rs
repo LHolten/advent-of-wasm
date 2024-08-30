@@ -165,26 +165,30 @@ struct SolutionForProblem<'a> {
 }
 
 fn solutions_for_problem<'a>(
-    q: &mut rust_query::Query<'a, Schema>,
+    rows: &mut rust_query::Query<'a, Schema>,
     problem: impl for<'x> Value<'x, Schema, Typ = Problem> + Copy,
 ) -> SolutionForProblem<'a> {
-    let solution = Solution::join(q);
-    q.filter(solution.problem().eq(problem));
+    let solution = Solution::join(rows);
+    rows.filter(solution.problem().eq(problem));
+
     let fail = Failure::unique(solution).not_null();
-    q.filter(fail.not());
-    let total_instances = q.aggregate(|q| {
+    rows.filter(fail.not());
+
+    let total_instances = rows.aggregate(|q| {
         let instance = Instance::join(q);
         q.filter(instance.problem().eq(problem));
         q.count_distinct(instance)
     });
-    let (max_fuel, count) = q.aggregate(|q| {
+
+    let (max_fuel, count) = rows.aggregate(|q| {
         let exec = Execution::join(q);
         q.filter_on(exec.solution(), solution);
         q.filter(exec.instance().problem().eq(problem));
         (q.max(exec.fuel_used()), q.count_distinct(exec))
     });
-    q.filter(count.eq(total_instances));
-    let max_fuel = q.filter_some(max_fuel);
+
+    rows.filter(count.eq(total_instances));
+    let max_fuel = rows.filter_some(max_fuel);
     SolutionForProblem { solution, max_fuel }
 }
 
@@ -313,6 +317,7 @@ pub async fn upload(
         });
 
         db.commit();
+        app.request_bench();
 
         Ok(Redirect::to(&format!(
             "/problem/{problem_name}/{solution_hash}"
