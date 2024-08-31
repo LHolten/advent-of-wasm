@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
         });
         let problem = db.get(Problem::unique(problem_name.as_str())).unwrap();
 
-        let num = db.exec(|q| {
+        let num = db.query(|q| {
             let count = q.aggregate(|q| {
                 let instance = Instance::join(q);
                 q.filter(instance.problem().eq(problem));

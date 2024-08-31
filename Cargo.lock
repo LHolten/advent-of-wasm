@@ -30,7 +30,6 @@ dependencies = [
  "maud",
  "oauth2",
  "rand",
- "ref-cast",
  "reqwest 0.12.7",
  "rust-query",
  "serde",
@@ -1773,7 +1772,7 @@ dependencies = [
 [[package]]
 name = "rust-query"
 version = "0.1.2"
-source = "git+https://github.com/LHolten/rust-query.git?rev=f4dee44#f4dee442496b1f962cb16ac2a97f6277234ee93d"
+source = "git+https://github.com/LHolten/rust-query.git?rev=68081fb#68081fbf1224fec660818ff99780cdb9102b5fa3"
 dependencies = [
  "elsa",
  "expect-test",
@@ -1795,7 +1794,7 @@ dependencies = [
 [[package]]
 name = "rust-query-macros"
 version = "0.1.0"
-source = "git+https://github.com/LHolten/rust-query.git?rev=f4dee44#f4dee442496b1f962cb16ac2a97f6277234ee93d"
+source = "git+https://github.com/LHolten/rust-query.git?rev=68081fb#68081fbf1224fec660818ff99780cdb9102b5fa3"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",

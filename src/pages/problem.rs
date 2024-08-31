@@ -66,7 +66,7 @@ pub async fn get_problem(
             let size: u64 = size.parse().map_err(|_| "could not parse size")?;
             let fuel: u64 = fuel.parse().map_err(|_| "could not parse fuel")?;
 
-            let hashes: Vec<_> = db.exec(|q| {
+            let hashes: Vec<_> = db.query(|q| {
                 let sfp = solutions_for_problem(q, problem);
                 q.filter(sfp.solution.program().file_size().eq(size as i64));
                 q.filter(sfp.max_fuel.eq(fuel as i64));
@@ -83,7 +83,7 @@ pub async fn get_problem(
             }
         }
 
-        let data = db.exec(|q| {
+        let data = db.query(|q| {
             let sfp = solutions_for_problem(q, problem);
             let yours = q.aggregate(|q| {
                 let subm = Submission::join(q);
@@ -165,13 +165,13 @@ struct SolutionForProblem<'a> {
 }
 
 fn solutions_for_problem<'a>(
-    rows: &mut rust_query::Query<'a, Schema>,
+    rows: &mut rust_query::Rows<'a, Schema>,
     problem: impl for<'x> Value<'x, Schema, Typ = Problem> + Copy,
 ) -> SolutionForProblem<'a> {
     let solution = Solution::join(rows);
     rows.filter(solution.problem().eq(problem));
 
-    let fail = Failure::unique(solution).not_null();
+    let fail = Failure::unique(solution).is_not_null();
     rows.filter(fail.not());
 
     let total_instances = rows.aggregate(|q| {

@@ -22,16 +22,16 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
         println!("querying the database for queue");
 
         app.write_transaction(|mut db| {
-            let needs_bench = db.exec(|q| {
+            let needs_bench = db.query(|q| {
                 let instance = Instance::join(q);
                 let solution = Solution::join(q);
                 q.filter(instance.problem().eq(solution.problem()));
 
-                let is_executed = Execution::unique(instance, solution).not_null();
+                let is_executed = Execution::unique(instance, solution).is_not_null();
                 // not executed yet
                 q.filter(is_executed.not());
 
-                let fail = Failure::unique(solution).not_null();
+                let fail = Failure::unique(solution).is_not_null();
                 // has not failed
                 q.filter(fail.not());
 

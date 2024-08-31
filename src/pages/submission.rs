@@ -43,7 +43,7 @@ pub async fn submission(
         }
 
         // list executions for this problem
-        let data = db.exec(|q| {
+        let data = db.query(|q| {
             let exec = Execution::join(q);
             q.filter(exec.instance().problem().eq(problem));
             q.filter(exec.solution().program().eq(program));
@@ -55,7 +55,7 @@ pub async fn submission(
 
         let failure = db.get(Failure::unique(solution));
 
-        let users: Vec<_> = db.exec(|q| {
+        let users: Vec<_> = db.query(|q| {
             let submission = Submission::join(q);
             q.filter(submission.solution().eq(program));
             q.into_vec((submission.timestamp(), submission.user().github_login()))
