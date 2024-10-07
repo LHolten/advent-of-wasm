@@ -4,7 +4,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::html;
-use rust_query::{FromRow, Value};
+use rust_query::{FromDummy, Table};
 
 use crate::{
     db,
@@ -29,14 +29,14 @@ pub async fn submission(
             .parse()
             .map_err(|_| "program hash is not formatted correctly")?;
         let program = db
-            .get(File::unique(i64::from(program_hash)))
+            .query_one(File::unique(i64::from(program_hash)))
             .ok_or("could not find program")?;
 
         let solution = db
-            .get(Solution::unique(program, problem))
+            .query_one(Solution::unique(program, problem))
             .ok_or("program was never submitted for problem")?;
 
-        #[derive(FromRow)]
+        #[derive(FromDummy)]
         struct ExecutionStats {
             seed: i64,
             fuel: i64,
@@ -53,7 +53,7 @@ pub async fn submission(
             })
         });
 
-        let failure = db.get(Failure::unique(solution));
+        let failure = db.query_one(Failure::unique(solution));
 
         let users: Vec<_> = db.query(|q| {
             let submission = Submission::join(q);
@@ -71,8 +71,8 @@ pub async fn submission(
         let res = html! {
             @if let Some(fail) = failure {
                 p class="notice" {
-                    "Failed for seed " (db.get(fail.seed()) as u64)
-                    pre{(db.get(fail.message()))}
+                    "Failed for seed " (db.query_one(fail.seed()) as u64)
+                    pre{(db.query_one(fail.message()))}
                 }
             }
             p {

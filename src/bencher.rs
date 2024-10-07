@@ -1,15 +1,15 @@
-use rust_query::{Free, FromRow, UnixEpoch, Value};
+use rust_query::{FromDummy, Table, TableRow, UnixEpoch};
 
 use crate::migration::{Execution, ExecutionDummy, Failure, FailureDummy, Instance, Solution};
 use crate::AppState;
 
-#[derive(FromRow)]
+#[derive(FromDummy)]
 struct NeedsBench<'a> {
     program_hash: i64,
     problem_name: String,
     seed: i64,
-    instance: Free<'a, Instance>,
-    solution: Free<'a, Solution>,
+    instance: TableRow<'a, Instance>,
+    solution: TableRow<'a, Solution>,
 }
 
 pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
@@ -27,11 +27,11 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                 let solution = Solution::join(q);
                 q.filter(instance.problem().eq(solution.problem()));
 
-                let is_executed = Execution::unique(instance, solution).is_not_null();
+                let is_executed = Execution::unique(&instance, &solution).is_some();
                 // not executed yet
                 q.filter(is_executed.not());
 
-                let fail = Failure::unique(solution).is_not_null();
+                let fail = Failure::unique(&solution).is_some();
                 // has not failed
                 q.filter(fail.not());
 

@@ -6,10 +6,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::{html, PreEscaped};
-use rust_query::{
-    ops::{Aggr, Assume, Col, Db},
-    FromRow, UnixEpoch, Value,
-};
+use rust_query::{aggregate, Column, FromDummy, IntoColumn, Table, UnixEpoch};
 use serde::Deserialize;
 
 use crate::{
@@ -34,7 +31,7 @@ pub struct SolutionQuery {
     score: Option<String>,
 }
 
-#[derive(Clone, FromRow)]
+#[derive(Clone, FromDummy)]
 struct SolutionStats {
     file_hash: i64,
     max_fuel: i64,
@@ -85,7 +82,7 @@ pub async fn get_problem(
 
         let data = db.query(|q| {
             let sfp = solutions_for_problem(q, problem);
-            let yours = q.aggregate(|q| {
+            let yours = aggregate(|q| {
                 let subm = Submission::join(q);
                 q.filter_on(subm.solution(), sfp.solution.program());
                 if let Some(github_id) = github_id {
@@ -160,30 +157,31 @@ pub async fn get_problem(
 }
 
 struct SolutionForProblem<'a> {
-    solution: Db<'a, Solution>,
-    max_fuel: Assume<Col<Option<i64>, Aggr<'a, Schema>>>,
+    solution: Column<'a, Schema, Solution>,
+    max_fuel: Column<'a, Schema, i64>,
 }
 
 fn solutions_for_problem<'a>(
     rows: &mut rust_query::Rows<'a, Schema>,
-    problem: impl for<'x> Value<'x, Schema, Typ = Problem> + Copy,
+    problem: impl IntoColumn<'a, Schema, Typ = Problem>,
 ) -> SolutionForProblem<'a> {
+    let problem = problem.into_column();
     let solution = Solution::join(rows);
-    rows.filter(solution.problem().eq(problem));
+    rows.filter(solution.problem().eq(&problem));
 
-    let fail = Failure::unique(solution).is_not_null();
+    let fail = Failure::unique(&solution).is_some();
     rows.filter(fail.not());
 
-    let total_instances = rows.aggregate(|q| {
+    let total_instances = aggregate(|q| {
         let instance = Instance::join(q);
-        q.filter(instance.problem().eq(problem));
+        q.filter_on(instance.problem(), &problem);
         q.count_distinct(instance)
     });
 
-    let (max_fuel, count) = rows.aggregate(|q| {
+    let (max_fuel, count) = aggregate(|q| {
         let exec = Execution::join(q);
-        q.filter_on(exec.solution(), solution);
-        q.filter(exec.instance().problem().eq(problem));
+        q.filter_on(exec.solution(), &solution);
+        q.filter_on(exec.instance().problem(), &problem);
         (q.max(exec.fuel_used()), q.count_distinct(exec))
     });
 
@@ -300,7 +298,9 @@ pub async fn upload(
             file_size: data_len as i64,
             timestamp: UnixEpoch,
         });
-        let program = db.get(File::unique(i64::from(solution_hash))).unwrap();
+        let program = db
+            .query_one(File::unique(i64::from(solution_hash)))
+            .unwrap();
 
         db.try_insert(SolutionDummy {
             program,
@@ -309,7 +309,7 @@ pub async fn upload(
             timestamp: UnixEpoch,
         });
 
-        let user = db.get(User::unique(github_id.0)).unwrap();
+        let user = db.query_one(User::unique(github_id.0)).unwrap();
         db.try_insert(SubmissionDummy {
             solution: program,
             user,

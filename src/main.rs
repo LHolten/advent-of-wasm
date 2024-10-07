@@ -17,7 +17,7 @@ mod problem;
 mod solution;
 
 use migration::{initialize_db, Instance, InstanceDummy, Problem, ProblemDummy, Schema};
-use rust_query::{Database, ReadTransaction, ThreadToken, UnixEpoch, Value, WriteTransaction};
+use rust_query::{aggregate, Database, Table, ThreadToken, Transaction, TransactionMut, UnixEpoch};
 
 #[derive(Clone)]
 pub struct AppState(Arc<AppStateInner>);
@@ -41,7 +41,7 @@ impl AppState {
     /// Don't forget to commit!
     pub fn write_transaction<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(WriteTransaction<'_, Schema>) -> R,
+        F: FnOnce(TransactionMut<'_, Schema>) -> R,
     {
         tokio::task::block_in_place(|| {
             let mut token = ThreadToken::try_new().unwrap();
@@ -52,7 +52,7 @@ impl AppState {
 
     pub fn read_transaction<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(ReadTransaction<'_, Schema>) -> R,
+        F: FnOnce(Transaction<'_, Schema>) -> R,
     {
         tokio::task::block_in_place(|| {
             let mut token = ThreadToken::try_new().unwrap();
@@ -81,16 +81,15 @@ async fn main() -> anyhow::Result<()> {
             timestamp: UnixEpoch,
             name: problem_name.as_str(),
         });
-        let problem = db.get(Problem::unique(problem_name.as_str())).unwrap();
+        let problem = db
+            .query_one(Problem::unique(problem_name.as_str()))
+            .unwrap();
 
-        let num = db.query(|q| {
-            let count = q.aggregate(|q| {
-                let instance = Instance::join(q);
-                q.filter(instance.problem().eq(problem));
-                q.count_distinct(instance)
-            });
-            q.into_vec(count)[0]
-        });
+        let num = db.query_one(aggregate(|q| {
+            let instance = Instance::join(q);
+            q.filter(instance.problem().eq(problem));
+            q.count_distinct(instance)
+        }));
 
         let mut rng = thread_rng();
         // add instances so that there are enough for the benchmark

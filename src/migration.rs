@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use crate::problem::ProblemDir;
 use rust_query::{
-    migration::{schema, Prepare},
-    Database, ThreadToken,
+    migration::{schema, Alter, Create, Prepare},
+    Database, Dummy, IntoColumn, Table, ThreadToken,
 };
 
 #[schema]
@@ -15,7 +17,6 @@ enum Schema {
     },
     #[version(2..)]
     #[unique(name)]
-    #[create_from(File)]
     Problem {
         timestamp: i64,
         name: String,
@@ -84,36 +85,49 @@ pub use v3::*;
 
 pub fn initialize_db(t: &mut ThreadToken) -> Database<Schema> {
     let problem_dir = ProblemDir::new().unwrap();
+    let mut hash_to_name: HashMap<i64, String> = problem_dir
+        .problems
+        .into_iter()
+        .filter_map(|(name, problem)| {
+            problem
+                .original_file_hash
+                .map(|hash| (i64::from(hash), name))
+        })
+        .collect();
 
     let prepare = Prepare::open("test.db");
     // TODO: add trait constraints to migration types
     let m = prepare.create_db_empty().unwrap();
-    let m = m.migrate(t, |c| v2::up::Schema {
-        problem: Box::new(|file| {
-            let hash = c.get(file.file_hash()).into();
-            let problem = problem_dir
-                .problems
-                .iter()
-                .find(|x| x.1.original_file_hash == Some(hash));
+    let m = m.migrate(t, |_| v2::update::Schema {
+        problem: Box::new(|rows| {
+            let file = v1::File::join(rows);
+            let hash = file.file_hash();
 
-            problem.map(|(problem_name, _)| v2::up::ProblemMigration {
-                name: problem_name.as_str(),
+            // figure out which files are problems
+            let mut cond = false.into_column();
+            for problem_hash in hash_to_name.keys() {
+                cond = cond.or(hash.eq(problem_hash));
+            }
+            rows.filter(cond);
+
+            Create::new(v2::update::ProblemMigration {
+                name: hash.map_dummy(|hash| hash_to_name.remove(&hash).unwrap()),
                 timestamp: file.timestamp(),
                 original: file,
             })
         }),
     });
-    let m = m.migrate(t, |c| v3::up::Schema {
-        problem: Box::new(|_problem| v3::up::ProblemMigration {}),
-        instance: Box::new(|instance| v3::up::InstanceMigration {
-            problem: c
-                .get(v2::Problem::unique_original(instance.problem()))
-                .unwrap(),
+    let m = m.migrate(t, |_| v3::update::Schema {
+        problem: Box::new(|_problem| Alter::new(v3::update::ProblemMigration {})),
+        instance: Box::new(|instance| {
+            Alter::new(v3::update::InstanceMigration {
+                problem: v2::Problem::unique_original(instance.problem()).map_dummy(Option::unwrap),
+            })
         }),
-        solution: Box::new(|solution| v3::up::SolutionMigration {
-            problem: c
-                .get(v2::Problem::unique_original(solution.problem()))
-                .unwrap(),
+        solution: Box::new(|solution| {
+            Alter::new(v3::update::SolutionMigration {
+                problem: v2::Problem::unique_original(solution.problem()).map_dummy(Option::unwrap),
+            })
         }),
     });
     m.finish(t).unwrap()
