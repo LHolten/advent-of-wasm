@@ -1771,8 +1771,8 @@ dependencies = [
 
 [[package]]
 name = "rust-query"
-version = "0.1.2"
-source = "git+https://github.com/LHolten/rust-query.git?rev=0e973b7#0e973b77352547c28265fd16c06fb17666363347"
+version = "0.2.1"
+source = "git+https://github.com/LHolten/rust-query.git?rev=b1a6a2b#b1a6a2b6fdb91d0ce0377f0a9767999ab04321c7"
 dependencies = [
  "elsa",
  "expect-test",
@@ -1793,8 +1793,8 @@ dependencies = [
 
 [[package]]
 name = "rust-query-macros"
-version = "0.1.0"
-source = "git+https://github.com/LHolten/rust-query.git?rev=0e973b7#0e973b77352547c28265fd16c06fb17666363347"
+version = "0.2.0"
+source = "git+https://github.com/LHolten/rust-query.git?rev=b1a6a2b#b1a6a2b6fdb91d0ce0377f0a9767999ab04321c7"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
