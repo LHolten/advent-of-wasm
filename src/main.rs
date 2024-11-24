@@ -16,8 +16,8 @@ mod pages;
 mod problem;
 mod solution;
 
-use migration::{initialize_db, Instance, InstanceDummy, Problem, ProblemDummy, Schema};
-use rust_query::{aggregate, Database, Table, ThreadToken, Transaction, TransactionMut, UnixEpoch};
+use migration::{initialize_db, Instance, Problem, Schema};
+use rust_query::{aggregate, Database, LocalClient, Table, Transaction, TransactionMut, UnixEpoch};
 
 #[derive(Clone)]
 pub struct AppState(Arc<AppStateInner>);
@@ -44,8 +44,8 @@ impl AppState {
         F: FnOnce(TransactionMut<'_, Schema>) -> R,
     {
         tokio::task::block_in_place(|| {
-            let mut token = ThreadToken::try_new().unwrap();
-            let transaction = self.database.write_lock(&mut token);
+            let mut client = LocalClient::try_new().unwrap();
+            let transaction = client.transaction_mut(&self.database);
             f(transaction)
         })
     }
@@ -55,8 +55,8 @@ impl AppState {
         F: FnOnce(Transaction<'_, Schema>) -> R,
     {
         tokio::task::block_in_place(|| {
-            let mut token = ThreadToken::try_new().unwrap();
-            let transaction = self.database.read(&mut token);
+            let mut client = LocalClient::try_new().unwrap();
+            let transaction = client.transaction(&self.database);
             f(transaction)
         })
     }
@@ -71,19 +71,15 @@ impl AppState {
 async fn main() -> anyhow::Result<()> {
     let problem_dir = ProblemDir::new()?;
 
-    let mut token = ThreadToken::try_new().unwrap();
-    let database = initialize_db(&mut token);
-    let mut db = database.write_lock(&mut token);
+    let mut client = LocalClient::try_new().unwrap();
+    let database = initialize_db(&mut client);
+    let mut db = client.transaction_mut(&database);
 
     for (problem_name, details) in &problem_dir.problems {
-        // on conflict do nothing
-        db.try_insert(ProblemDummy {
+        let problem = db.find_or_insert(Problem {
             timestamp: UnixEpoch,
             name: problem_name.as_str(),
         });
-        let problem = db
-            .query_one(Problem::unique(problem_name.as_str()))
-            .unwrap();
 
         let num = db.query_one(aggregate(|q| {
             let instance = Instance::join(q);
@@ -96,7 +92,7 @@ async fn main() -> anyhow::Result<()> {
         for _ in (0..details.leaderboard_instances).skip(num as usize) {
             let seed = rng.next_u64() as i64;
 
-            db.try_insert(InstanceDummy {
+            let _ = db.try_insert(Instance {
                 problem,
                 seed,
                 timestamp: UnixEpoch,
@@ -104,7 +100,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     db.commit();
-    drop(token);
+    drop(client);
 
     let app_state = AppStateInner {
         problem_dir,

@@ -1,6 +1,6 @@
 use rust_query::{FromDummy, Table, TableRow, UnixEpoch};
 
-use crate::migration::{Execution, ExecutionDummy, Failure, FailureDummy, Instance, Solution};
+use crate::migration::{Execution, Failure, Instance, Solution};
 use crate::AppState;
 
 #[derive(FromDummy)]
@@ -54,7 +54,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
 
                 match res {
                     Ok(fuel) => {
-                        db.try_insert(ExecutionDummy {
+                        db.try_insert(Execution {
                             answer: None::<i64>,
                             fuel_used: fuel as i64,
                             instance: item.instance,
@@ -65,7 +65,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                     }
                     Err(err) => {
                         // there might already be a failure, so we can fail to insert.
-                        db.try_insert(FailureDummy {
+                        let _ = db.try_insert(Failure {
                             seed: item.seed,
                             solution: item.solution,
                             timestamp: UnixEpoch,

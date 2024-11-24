@@ -13,10 +13,7 @@ use crate::{
     chart::{Axis, Grid, Root, Series, Title, Tooltip},
     db,
     hash::{self, FileHash},
-    migration::{
-        Execution, Failure, File, FileDummy, Instance, Problem, Schema, Solution, SolutionDummy,
-        Submission, SubmissionDummy, User,
-    },
+    migration::{Execution, Failure, File, Instance, Problem, Schema, Solution, Submission, User},
     pages::{
         header,
         login::{fast_login, safe_login},
@@ -31,11 +28,11 @@ pub struct SolutionQuery {
     score: Option<String>,
 }
 
-#[derive(Clone, FromDummy)]
+#[derive(Debug, Clone, FromDummy)]
 struct SolutionStats {
-    file_hash: i64,
+    file_size: i64, // sort by file_size first
     max_fuel: i64,
-    file_size: i64,
+    file_hash: i64,
     yours: bool,
 }
 
@@ -293,16 +290,13 @@ pub async fn upload(
     app.write_transaction(|mut db| {
         let problem = db::get_problem(&db, &problem_name)?;
 
-        db.try_insert(FileDummy {
+        let program = db.find_or_insert(File {
             file_hash: i64::from(solution_hash),
             file_size: data_len as i64,
             timestamp: UnixEpoch,
         });
-        let program = db
-            .query_one(File::unique(i64::from(solution_hash)))
-            .unwrap();
 
-        db.try_insert(SolutionDummy {
+        let _ = db.try_insert(Solution {
             program,
             problem,
             random_tests: 0,
@@ -310,7 +304,8 @@ pub async fn upload(
         });
 
         let user = db.query_one(User::unique(github_id.0)).unwrap();
-        db.try_insert(SubmissionDummy {
+
+        let _ = db.try_insert(Submission {
             solution: program,
             user,
             timestamp: UnixEpoch,

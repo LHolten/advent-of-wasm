@@ -13,7 +13,7 @@ use rust_query::UnixEpoch;
 use serde::Deserialize;
 
 use crate::db::GithubId;
-use crate::migration::UserDummy;
+use crate::migration::User;
 use crate::AppState;
 
 #[derive(Deserialize)]
@@ -125,7 +125,7 @@ pub async fn safe_login(jar: &mut CookieJar, app: &AppState) -> Result<GithubId,
     let github_login = val.get("login").unwrap().as_str().unwrap().to_owned();
 
     app.write_transaction(move |mut db| {
-        db.try_insert(UserDummy {
+        let _ = db.try_insert(User {
             github_id: github_id as i64,
             github_login: github_login.as_str(),
             timestamp: UnixEpoch,

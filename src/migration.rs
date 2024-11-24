@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::problem::ProblemDir;
 use rust_query::{
-    migration::{schema, Alter, Create, Prepare},
-    Database, Dummy, IntoColumn, Table, ThreadToken,
+    migration::{schema, Alter, Config, Create},
+    Database, Dummy, IntoColumn, LocalClient, Table,
 };
 
 #[schema]
@@ -83,7 +83,7 @@ enum Schema {
 
 pub use v3::*;
 
-pub fn initialize_db(t: &mut ThreadToken) -> Database<Schema> {
+pub fn initialize_db(client: &mut LocalClient) -> Database<Schema> {
     let problem_dir = ProblemDir::new().unwrap();
     let mut hash_to_name: HashMap<i64, String> = problem_dir
         .problems
@@ -95,10 +95,9 @@ pub fn initialize_db(t: &mut ThreadToken) -> Database<Schema> {
         })
         .collect();
 
-    let prepare = Prepare::open("test.db");
+    let m = client.migrator(Config::open("test.db")).unwrap();
     // TODO: add trait constraints to migration types
-    let m = prepare.create_db_empty().unwrap();
-    let m = m.migrate(t, |_| v2::update::Schema {
+    let m = m.migrate(v2::update::Schema {
         problem: Box::new(|rows| {
             let file = v1::File::join(rows);
             let hash = file.file_hash();
@@ -117,7 +116,7 @@ pub fn initialize_db(t: &mut ThreadToken) -> Database<Schema> {
             })
         }),
     });
-    let m = m.migrate(t, |_| v3::update::Schema {
+    let m = m.migrate(v3::update::Schema {
         problem: Box::new(|_problem| Alter::new(v3::update::ProblemMigration {})),
         instance: Box::new(|instance| {
             Alter::new(v3::update::InstanceMigration {
@@ -130,7 +129,7 @@ pub fn initialize_db(t: &mut ThreadToken) -> Database<Schema> {
             })
         }),
     });
-    m.finish(t).unwrap()
+    m.finish().unwrap()
 }
 
 // Test that migrations are working
