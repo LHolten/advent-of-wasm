@@ -2,10 +2,24 @@ use std::{fmt::Display, str::FromStr};
 
 use base64::URL_SAFE_NO_PAD;
 use k12::digest::{ExtendableOutput, Update};
+use rust_query::{
+    dummy::{FromColumn, FromDummy, MapDummy},
+    Column, Dummy,
+};
 use serde::{de, Deserialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FileHash([u8; 8]);
+
+impl<'t, S> FromDummy<'t, S> for FileHash {
+    type Dummy<'columns> = MapDummy<Column<'columns, S, i64>, fn(i64) -> FileHash>;
+}
+
+impl<'t, S> FromColumn<'t, S, i64> for FileHash {
+    fn from_column<'columns>(col: rust_query::Column<'columns, S, i64>) -> Self::Dummy<'columns> {
+        col.map_dummy(|value| FileHash(value.to_le_bytes()))
+    }
+}
 
 impl FileHash {
     pub fn new(data: impl AsRef<[u8]>) -> Self {
@@ -20,12 +34,6 @@ impl FileHash {
 impl From<FileHash> for i64 {
     fn from(value: FileHash) -> Self {
         i64::from_le_bytes(value.0)
-    }
-}
-
-impl From<i64> for FileHash {
-    fn from(value: i64) -> Self {
-        FileHash(value.to_le_bytes())
     }
 }
 

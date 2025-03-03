@@ -1,11 +1,12 @@
-use rust_query::{FromDummy, Table, TableRow, UnixEpoch};
+use rust_query::{Dummy, IntoColumn, Table, TableRow, UnixEpoch};
 
+use crate::hash::FileHash;
 use crate::migration::{Execution, Failure, Instance, Solution};
 use crate::AppState;
 
-#[derive(FromDummy)]
+#[derive(Dummy)]
 struct NeedsBench<'a> {
-    program_hash: i64,
+    program_hash: FileHash,
     problem_name: String,
     seed: i64,
     instance: TableRow<'a, Instance>,
@@ -36,7 +37,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                 q.filter(fail.not());
 
                 q.into_vec(NeedsBenchDummy {
-                    program_hash: solution.program().file_hash(),
+                    program_hash: solution.program().file_hash().into_trivial(),
                     problem_name: solution.problem().name(),
                     seed: instance.seed(),
                     instance,
@@ -46,7 +47,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
 
             for item in &needs_bench {
                 let solution_obj = crate::solution::Solution {
-                    hash: item.program_hash.into(),
+                    hash: item.program_hash,
                 };
                 let problem = &app.problem_dir.problems[&item.problem_name];
 
@@ -64,8 +65,8 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                         .unwrap();
                     }
                     Err(err) => {
-                        // there might already be a failure, so we can fail to insert.
-                        let _ = db.try_insert(Failure {
+                        // there might already be a failure.
+                        db.find_or_insert(Failure {
                             seed: item.seed,
                             solution: item.solution,
                             timestamp: UnixEpoch,

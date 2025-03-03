@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
 
         let num = db.query_one(aggregate(|q| {
             let instance = Instance::join(q);
-            q.filter(instance.problem().eq(problem));
+            q.filter_on(instance.problem(), problem);
             q.count_distinct(instance)
         }));
 
@@ -92,7 +92,7 @@ async fn main() -> anyhow::Result<()> {
         for _ in (0..details.leaderboard_instances).skip(num as usize) {
             let seed = rng.next_u64() as i64;
 
-            let _ = db.try_insert(Instance {
+            db.find_or_insert(Instance {
                 problem,
                 seed,
                 timestamp: UnixEpoch,

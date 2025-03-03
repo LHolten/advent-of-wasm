@@ -135,14 +135,15 @@ pub fn initialize_db(client: &mut LocalClient) -> Database<Schema> {
 // Test that migrations are working
 #[cfg(test)]
 mod tests {
-    use rust_query::migration::expect;
+    use expect_test::expect;
+    use rust_query::migration::hash_schema;
 
     use super::*;
 
     #[test]
     fn migrations_test() {
-        v1::assert_hash(expect!["fe336f7b8ab2a39e"]);
-        v2::assert_hash(expect!["fe9891d018ce713f"]);
-        v3::assert_hash(expect!["fcc2bc960920cc33"]);
+        expect!["fe336f7b8ab2a39e"].assert_eq(&hash_schema::<v1::Schema>());
+        expect!["fe9891d018ce713f"].assert_eq(&hash_schema::<v2::Schema>());
+        expect!["fcc2bc960920cc33"].assert_eq(&hash_schema::<v3::Schema>());
     }
 }

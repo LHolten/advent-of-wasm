@@ -6,7 +6,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::{html, PreEscaped};
-use rust_query::{aggregate, Column, FromDummy, IntoColumn, Table, UnixEpoch};
+use rust_query::{aggregate, Column, Dummy, IntoColumn, Table, UnixEpoch};
 use serde::Deserialize;
 
 use crate::{
@@ -28,17 +28,17 @@ pub struct SolutionQuery {
     score: Option<String>,
 }
 
-#[derive(Debug, Clone, FromDummy)]
+#[derive(Debug, Clone, Dummy)]
 struct SolutionStats {
     file_size: i64, // sort by file_size first
     max_fuel: i64,
-    file_hash: i64,
+    file_hash: FileHash,
     yours: bool,
 }
 
 impl SolutionStats {
     pub fn name(&self) -> String {
-        FileHash::from(self.file_hash).to_string()
+        self.file_hash.to_string()
     }
 }
 
@@ -60,14 +60,11 @@ pub async fn get_problem(
             let size: u64 = size.parse().map_err(|_| "could not parse size")?;
             let fuel: u64 = fuel.parse().map_err(|_| "could not parse fuel")?;
 
-            let hashes: Vec<_> = db.query(|q| {
+            let hashes: Vec<FileHash> = db.query(|q| {
                 let sfp = solutions_for_problem(q, problem);
                 q.filter(sfp.solution.program().file_size().eq(size as i64));
                 q.filter(sfp.max_fuel.eq(fuel as i64));
-                q.into_vec(sfp.solution.program().file_hash())
-                    .into_iter()
-                    .map(|row| FileHash::from(row))
-                    .collect()
+                q.into_vec(sfp.solution.program().file_hash().into_trivial())
             });
             if hashes.len() == 1 {
                 let target = format!("{problem_name}/{}", &hashes[0]);
@@ -92,7 +89,7 @@ pub async fn get_problem(
 
             q.into_vec(SolutionStatsDummy {
                 file_size: sfp.solution.program().file_size(),
-                file_hash: sfp.solution.program().file_hash(),
+                file_hash: sfp.solution.program().file_hash().into_trivial(),
                 max_fuel: sfp.max_fuel,
                 yours,
             })
@@ -296,7 +293,7 @@ pub async fn upload(
             timestamp: UnixEpoch,
         });
 
-        let _ = db.try_insert(Solution {
+        db.find_or_insert(Solution {
             program,
             problem,
             random_tests: 0,
@@ -305,7 +302,7 @@ pub async fn upload(
 
         let user = db.query_one(User::unique(github_id.0)).unwrap();
 
-        let _ = db.try_insert(Submission {
+        db.find_or_insert(Submission {
             solution: program,
             user,
             timestamp: UnixEpoch,
