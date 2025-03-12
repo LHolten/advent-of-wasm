@@ -2,22 +2,17 @@ use std::{fmt::Display, str::FromStr};
 
 use base64::URL_SAFE_NO_PAD;
 use k12::digest::{ExtendableOutput, Update};
-use rust_query::{
-    dummy::{FromColumn, FromDummy, MapDummy},
-    Column, Dummy,
-};
+use rust_query::{FromExpr, IntoSelectExt, Select};
 use serde::{de, Deserialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FileHash([u8; 8]);
 
-impl<'t, S> FromDummy<'t, S> for FileHash {
-    type Dummy<'columns> = MapDummy<Column<'columns, S, i64>, fn(i64) -> FileHash>;
-}
-
-impl<'t, S> FromColumn<'t, S, i64> for FileHash {
-    fn from_column<'columns>(col: rust_query::Column<'columns, S, i64>) -> Self::Dummy<'columns> {
-        col.map_dummy(|value| FileHash(value.to_le_bytes()))
+impl<'t, S> FromExpr<'t, S, i64> for FileHash {
+    fn from_expr<'columns>(
+        col: impl rust_query::IntoExpr<'columns, S, Typ = i64>,
+    ) -> Select<'columns, 't, S, Self> {
+        col.map_select(|value| FileHash(value.to_le_bytes()))
     }
 }
 

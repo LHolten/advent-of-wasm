@@ -6,7 +6,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::{html, PreEscaped};
-use rust_query::{aggregate, Column, Dummy, IntoColumn, Table, UnixEpoch};
+use rust_query::{aggregate, Expr, FromExpr, IntoExpr, Select, Table, UnixEpoch};
 use serde::Deserialize;
 
 use crate::{
@@ -28,7 +28,7 @@ pub struct SolutionQuery {
     score: Option<String>,
 }
 
-#[derive(Debug, Clone, Dummy)]
+#[derive(Debug, Clone, Select)]
 struct SolutionStats {
     file_size: i64, // sort by file_size first
     max_fuel: i64,
@@ -64,7 +64,7 @@ pub async fn get_problem(
                 let sfp = solutions_for_problem(q, problem);
                 q.filter(sfp.solution.program().file_size().eq(size as i64));
                 q.filter(sfp.max_fuel.eq(fuel as i64));
-                q.into_vec(sfp.solution.program().file_hash().into_trivial())
+                q.into_vec(FileHash::from_expr(sfp.solution.program().file_hash()))
             });
             if hashes.len() == 1 {
                 let target = format!("{problem_name}/{}", &hashes[0]);
@@ -87,9 +87,9 @@ pub async fn get_problem(
                 q.exists()
             });
 
-            q.into_vec(SolutionStatsDummy {
+            q.into_vec(SolutionStatsSelect {
                 file_size: sfp.solution.program().file_size(),
-                file_hash: sfp.solution.program().file_hash().into_trivial(),
+                file_hash: FileHash::from_expr(sfp.solution.program().file_hash()),
                 max_fuel: sfp.max_fuel,
                 yours,
             })
@@ -151,15 +151,15 @@ pub async fn get_problem(
 }
 
 struct SolutionForProblem<'a> {
-    solution: Column<'a, Schema, Solution>,
-    max_fuel: Column<'a, Schema, i64>,
+    solution: Expr<'a, Schema, Solution>,
+    max_fuel: Expr<'a, Schema, i64>,
 }
 
 fn solutions_for_problem<'a>(
-    rows: &mut rust_query::Rows<'a, Schema>,
-    problem: impl IntoColumn<'a, Schema, Typ = Problem>,
+    rows: &mut rust_query::args::Rows<'a, Schema>,
+    problem: impl IntoExpr<'a, Schema, Typ = Problem>,
 ) -> SolutionForProblem<'a> {
-    let problem = problem.into_column();
+    let problem = problem.into_expr();
     let solution = Solution::join(rows);
     rows.filter(solution.problem().eq(&problem));
 

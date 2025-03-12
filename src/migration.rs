@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use crate::problem::ProblemDir;
 use rust_query::{
-    migration::{schema, Alter, Config, Create},
-    Database, Dummy, IntoColumn, LocalClient, Table,
+    migration::{schema, Config},
+    Database, LocalClient,
 };
 
 #[schema]
-#[version(1..4)]
+#[version(1..=2)]
 enum Schema {
     #[unique(file_hash)]
     File {
@@ -17,35 +17,26 @@ enum Schema {
     },
     #[version(2..)]
     #[unique(name)]
-    Problem {
-        timestamp: i64,
-        name: String,
-        #[unique_original]
-        #[version(..3)]
-        original: File,
-    },
+    #[from(File)]
+    Problem { timestamp: i64, name: String },
     // a problem benchmark instance
     #[unique(problem, seed)]
     Instance {
         timestamp: i64,
-        #[version(..3)]
-        problem: File,
-        #[version(3..)]
-        problem: Problem,
         seed: i64,
+        #[reference]
+        problem: Problem,
     },
     // a wasm solution
     // program can only be submitted to a problem once
     #[unique(program, problem)]
     Solution {
         timestamp: i64,
-        program: File,
-        #[version(..3)]
-        problem: File,
-        #[version(3..)]
-        problem: Problem,
         // how many random tests did this solution pass
         random_tests: i64,
+        program: File,
+        #[reference]
+        problem: Problem,
     },
     // a random test "or benchmark test" failed
     #[unique(solution)]
@@ -81,7 +72,7 @@ enum Schema {
     },
 }
 
-pub use v3::*;
+pub use v2::*;
 
 pub fn initialize_db(client: &mut LocalClient) -> Database<Schema> {
     let problem_dir = ProblemDir::new().unwrap();
@@ -96,38 +87,17 @@ pub fn initialize_db(client: &mut LocalClient) -> Database<Schema> {
         .collect();
 
     let m = client.migrator(Config::open("test.db")).unwrap();
-    // TODO: add trait constraints to migration types
-    let m = m.migrate(v2::update::Schema {
-        problem: Box::new(|rows| {
-            let file = v1::File::join(rows);
-            let hash = file.file_hash();
-
-            // figure out which files are problems
-            let mut cond = false.into_column();
-            for problem_hash in hash_to_name.keys() {
-                cond = cond.or(hash.eq(problem_hash));
+    let m = m.migrate(|txn, new: v2::update::Args| {
+        for item in new.problem {
+            let (hash, timestamp) = txn.query_one((item.file_hash(), item.timestamp()));
+            if let Some(name) = hash_to_name.remove(&hash) {
+                item.try_insert(v2::update::ProblemMigration { name, timestamp })
+                    .expect("name is unique");
             }
-            rows.filter(cond);
-
-            Create::new(v2::update::ProblemMigration {
-                name: hash.map_dummy(|hash| hash_to_name.remove(&hash).unwrap()),
-                timestamp: file.timestamp(),
-                original: file,
-            })
-        }),
-    });
-    let m = m.migrate(v3::update::Schema {
-        problem: Box::new(|_problem| Alter::new(v3::update::ProblemMigration {})),
-        instance: Box::new(|instance| {
-            Alter::new(v3::update::InstanceMigration {
-                problem: v2::Problem::unique_original(instance.problem()).map_dummy(Option::unwrap),
-            })
-        }),
-        solution: Box::new(|solution| {
-            Alter::new(v3::update::SolutionMigration {
-                problem: v2::Problem::unique_original(solution.problem()).map_dummy(Option::unwrap),
-            })
-        }),
+        }
+        v2::update::Schema {
+            problem: Box::new(|| panic!("name missing for hash")),
+        }
     });
     m.finish().unwrap()
 }
@@ -143,7 +113,6 @@ mod tests {
     #[test]
     fn migrations_test() {
         expect!["fe336f7b8ab2a39e"].assert_eq(&hash_schema::<v1::Schema>());
-        expect!["fe9891d018ce713f"].assert_eq(&hash_schema::<v2::Schema>());
-        expect!["fcc2bc960920cc33"].assert_eq(&hash_schema::<v3::Schema>());
+        expect!["fcc2bc960920cc33"].assert_eq(&hash_schema::<v2::Schema>());
     }
 }

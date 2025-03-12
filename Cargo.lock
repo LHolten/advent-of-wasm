@@ -1288,9 +1288,9 @@ checksum = "433bfe06b8c75da9b2e3fbea6e5329ff87748f0b144ef75306e674c3f6f7c13f"
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.28.0"
+version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c10584274047cb335c23d3e61bcef8e323adae7c5c8c760540f73610177fc3f"
+checksum = "2e99fb7a497b1e3339bc746195567ed8d3e24945ecd636e3619d20b9de9e9149"
 dependencies = [
  "pkg-config",
  "vcpkg",
@@ -1703,9 +1703,9 @@ dependencies = [
 
 [[package]]
 name = "r2d2_sqlite"
-version = "0.24.0"
+version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a982edf65c129796dba72f8775b292ef482b40d035e827a9825b3bc07ccc5f2"
+checksum = "eb14dba8247a6a15b7fdbc7d389e2e6f03ee9f184f87117706d509c092dfe846"
 dependencies = [
  "r2d2",
  "rusqlite",
@@ -1885,9 +1885,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.31.0"
+version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b838eba278d213a8beaf485bd313fd580ca4505a00d5871caeb1457c55322cae"
+checksum = "7753b721174eb8ff87a9a0e799e2d7bc3749323e773db92e0984debb00019d6e"
 dependencies = [
  "bitflags 2.6.0",
  "fallible-iterator",
@@ -1900,7 +1900,7 @@ dependencies = [
 [[package]]
 name = "rust-query"
 version = "0.4.0"
-source = "git+https://github.com/LHolten/rust-query.git?rev=dace2ae#dace2ae5581b648d348e3ab3854ffe5b1c1255cb"
+source = "git+https://github.com/LHolten/rust-query.git?rev=7c3b0a6#7c3b0a6390612cf110555613bba7b63ea558f1d9"
 dependencies = [
  "elsa",
  "k12 0.3.0",
@@ -1912,12 +1912,13 @@ dependencies = [
  "rust-query-macros",
  "sea-query",
  "sea-query-rusqlite",
+ "static_assertions",
 ]
 
 [[package]]
 name = "rust-query-macros"
 version = "0.4.0"
-source = "git+https://github.com/LHolten/rust-query.git?rev=dace2ae#dace2ae5581b648d348e3ab3854ffe5b1c1255cb"
+source = "git+https://github.com/LHolten/rust-query.git?rev=7c3b0a6#7c3b0a6390612cf110555613bba7b63ea558f1d9"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -2068,9 +2069,9 @@ dependencies = [
 
 [[package]]
 name = "sea-query"
-version = "0.31.1"
+version = "0.32.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4fd043b8117af233e221f73e3ea8dfbc8e8c3c928017c474296db45c649105c"
+checksum = "b731192738ebf56d20580fc8ba2d23940333befe900b04dd08a26a77cd056f02"
 dependencies = [
  "inherent",
  "sea-query-derive",
@@ -2092,9 +2093,9 @@ dependencies = [
 
 [[package]]
 name = "sea-query-rusqlite"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edd26649cda07604727e01106ca109e4d0796a6d09c627eaa7831fbe46daf78b"
+checksum = "3743bbdfb24b1a84cc1a6fbf4b1188e6851f6e00ea20944b44c56bf03a585bb4"
 dependencies = [
  "rusqlite",
  "sea-query",
@@ -2267,6 +2268,12 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "subtle"

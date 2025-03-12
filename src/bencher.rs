@@ -1,10 +1,10 @@
-use rust_query::{Dummy, IntoColumn, Table, TableRow, UnixEpoch};
+use rust_query::{FromExpr, Select, Table, TableRow, UnixEpoch};
 
 use crate::hash::FileHash;
 use crate::migration::{Execution, Failure, Instance, Solution};
 use crate::AppState;
 
-#[derive(Dummy)]
+#[derive(Select)]
 struct NeedsBench<'a> {
     program_hash: FileHash,
     problem_name: String,
@@ -36,8 +36,8 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                 // has not failed
                 q.filter(fail.not());
 
-                q.into_vec(NeedsBenchDummy {
-                    program_hash: solution.program().file_hash().into_trivial(),
+                q.into_vec(NeedsBenchSelect {
+                    program_hash: FileHash::from_expr(solution.program().file_hash()),
                     problem_name: solution.problem().name(),
                     seed: instance.seed(),
                     instance,

@@ -4,7 +4,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::html;
-use rust_query::{Dummy, Table};
+use rust_query::{Select, Table};
 
 use crate::{
     db,
@@ -36,7 +36,7 @@ pub async fn submission(
             .query_one(Solution::unique(program, problem))
             .ok_or("program was never submitted for problem")?;
 
-        #[derive(Dummy)]
+        #[derive(Select)]
         struct ExecutionStats {
             seed: i64,
             fuel: i64,
@@ -47,7 +47,7 @@ pub async fn submission(
             let exec = Execution::join(q);
             q.filter(exec.instance().problem().eq(problem));
             q.filter(exec.solution().program().eq(program));
-            q.into_vec(ExecutionStatsDummy {
+            q.into_vec(ExecutionStatsSelect {
                 seed: exec.instance().seed(),
                 fuel: exec.fuel_used(),
             })
