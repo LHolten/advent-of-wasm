@@ -1900,7 +1900,7 @@ dependencies = [
 [[package]]
 name = "rust-query"
 version = "0.4.0"
-source = "git+https://github.com/LHolten/rust-query.git?rev=7c3b0a6#7c3b0a6390612cf110555613bba7b63ea558f1d9"
+source = "git+https://github.com/LHolten/rust-query.git?rev=5deae44#5deae444f2fd9ab200adef3937cea26493e0a3b9"
 dependencies = [
  "elsa",
  "k12 0.3.0",
@@ -1918,7 +1918,7 @@ dependencies = [
 [[package]]
 name = "rust-query-macros"
 version = "0.4.0"
-source = "git+https://github.com/LHolten/rust-query.git?rev=7c3b0a6#7c3b0a6390612cf110555613bba7b63ea558f1d9"
+source = "git+https://github.com/LHolten/rust-query.git?rev=5deae44#5deae444f2fd9ab200adef3937cea26493e0a3b9"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",

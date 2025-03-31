@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::problem::ProblemDir;
 use rust_query::{
-    migration::{schema, Config},
+    migration::{schema, Config, Migrated},
     Database, LocalClient,
 };
 
@@ -24,7 +24,7 @@ enum Schema {
     Instance {
         timestamp: i64,
         seed: i64,
-        #[reference]
+        #[follow]
         problem: Problem,
     },
     // a wasm solution
@@ -35,7 +35,7 @@ enum Schema {
         // how many random tests did this solution pass
         random_tests: i64,
         program: File,
-        #[reference]
+        #[follow]
         problem: Problem,
     },
     // a random test "or benchmark test" failed
@@ -87,16 +87,18 @@ pub fn initialize_db(client: &mut LocalClient) -> Database<Schema> {
         .collect();
 
     let m = client.migrator(Config::open("test.db")).unwrap();
-    let m = m.migrate(|txn, new: v2::update::Args| {
-        for item in new.problem {
-            let (hash, timestamp) = txn.query_one((item.file_hash(), item.timestamp()));
-            if let Some(name) = hash_to_name.remove(&hash) {
-                item.try_insert(v2::update::ProblemMigration { name, timestamp })
-                    .expect("name is unique");
+    let m = m.migrate(|txn| {
+        for (idx, old) in txn.unmigrated::<v2::Problem, v1::File!(file_hash, timestamp)>() {
+            if let Some(name) = hash_to_name.remove(&old.file_hash) {
+                idx.try_migrate(v2::Problem {
+                    timestamp: old.timestamp,
+                    name,
+                })
+                .expect("name should be unique");
             }
         }
         v2::update::Schema {
-            problem: Box::new(|| panic!("name missing for hash")),
+            problem: Migrated::map_fk_err(|| panic!("name missing for hash")),
         }
     });
     m.finish().unwrap()
