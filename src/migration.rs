@@ -6,70 +6,71 @@ use rust_query::{
     Database, LocalClient,
 };
 
-#[schema]
+#[schema(Schema)]
 #[version(1..=2)]
-enum Schema {
-    #[unique(file_hash)]
-    File {
-        timestamp: i64,
-        file_hash: i64,
-        file_size: i64,
-    },
+pub mod vN {
+    pub struct File {
+        pub timestamp: i64,
+        #[unique]
+        pub file_hash: i64,
+        pub file_size: i64,
+    }
     #[version(2..)]
-    #[unique(name)]
     #[from(File)]
-    Problem { timestamp: i64, name: String },
+    pub struct Problem {
+        pub timestamp: i64,
+        #[unique]
+        pub name: String,
+    }
     // a problem benchmark instance
     #[unique(problem, seed)]
-    Instance {
-        timestamp: i64,
-        seed: i64,
-        #[follow]
-        problem: Problem,
-    },
+    pub struct Instance {
+        pub timestamp: i64,
+        pub seed: i64,
+        pub problem: Problem,
+    }
     // a wasm solution
     // program can only be submitted to a problem once
     #[unique(program, problem)]
-    Solution {
-        timestamp: i64,
+    pub struct Solution {
+        pub timestamp: i64,
         // how many random tests did this solution pass
-        random_tests: i64,
-        program: File,
-        #[follow]
-        problem: Problem,
-    },
+        pub random_tests: i64,
+        pub program: File,
+        pub problem: Problem,
+    }
     // a random test "or benchmark test" failed
-    #[unique(solution)]
-    Failure {
-        timestamp: i64,
-        solution: Solution,
-        seed: i64,
-        message: String,
-    },
+    pub struct Failure {
+        pub timestamp: i64,
+        #[unique]
+        pub solution: Solution,
+        pub seed: i64,
+        pub message: String,
+    }
     // a user of the server
-    #[unique(github_id)]
-    User {
-        timestamp: i64,
-        github_id: i64,
-        github_login: String,
-    },
+    pub struct User {
+        pub timestamp: i64,
+        #[unique]
+        pub github_id: i64,
+        pub github_login: String,
+    }
     // who uploaded the solution
     #[unique(solution, user)]
-    Submission {
-        timestamp: i64,
-        solution: File,
-        user: User,
-    },
+    pub struct Submission {
+        pub timestamp: i64,
+        pub solution: File,
+        pub user: User,
+    }
     // a solution applied to a problem instance results in an execution
     #[unique(instance, solution)]
-    Execution {
-        timestamp: i64,
-        fuel_used: i64,
+    pub struct Execution {
+        pub timestamp: i64,
+        pub fuel_used: i64,
         // answer can be null if the solution crashed
-        answer: Option<i64>,
-        instance: Instance,
-        solution: Solution,
-    },
+        pub answer: Option<i64>,
+        pub instance: Instance,
+        pub solution: Solution,
+    }
 }
 
 pub use v2::*;
@@ -88,16 +89,15 @@ pub fn initialize_db(client: &mut LocalClient) -> Database<Schema> {
 
     let m = client.migrator(Config::open("test.db")).unwrap();
     let m = m.migrate(|txn| {
-        for (idx, old) in txn.unmigrated::<v2::Problem, v1::File!(file_hash, timestamp)>() {
-            if let Some(name) = hash_to_name.remove(&old.file_hash) {
-                idx.try_migrate(v2::Problem {
-                    timestamp: old.timestamp,
-                    name,
-                })
-                .expect("name should be unique");
-            }
-        }
-        v2::update::Schema {
+        txn.migrate_optional(|old: v1::File!(file_hash, timestamp)| {
+            let name = hash_to_name.remove(&old.file_hash)?;
+            Some(v1::migrate::Problem {
+                timestamp: old.timestamp,
+                name,
+            })
+        })
+        .expect("name should be unique");
+        v1::migrate::Schema {
             problem: Migrated::map_fk_err(|| panic!("name missing for hash")),
         }
     });

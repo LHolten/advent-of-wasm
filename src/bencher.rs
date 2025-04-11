@@ -55,7 +55,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
 
                 match res {
                     Ok(fuel) => {
-                        db.try_insert(Execution {
+                        db.insert(Execution {
                             answer: None::<i64>,
                             fuel_used: fuel as i64,
                             instance: item.instance,

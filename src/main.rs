@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
 
         let num = db.query_one(aggregate(|q| {
             let instance = Instance::join(q);
-            q.filter_on(instance.problem(), problem);
+            q.filter_on(instance.problem(), &problem);
             q.count_distinct(instance)
         }));
 
@@ -93,7 +93,7 @@ async fn main() -> anyhow::Result<()> {
             let seed = rng.next_u64() as i64;
 
             db.find_or_insert(Instance {
-                problem,
+                problem: &problem,
                 seed,
                 timestamp: UnixEpoch,
             });
@@ -104,7 +104,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app_state = AppStateInner {
         problem_dir,
-        database: database,
+        database,
         updated: Mutex::new(true),
         watcher: Condvar::new(),
     };

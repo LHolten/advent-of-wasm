@@ -30,7 +30,7 @@ pub struct SolutionQuery {
 
 #[derive(Debug, Clone, Select)]
 struct SolutionStats {
-    file_size: i64, // sort by file_size first
+    file_size: i64,
     max_fuel: i64,
     file_hash: FileHash,
     yours: bool,
@@ -74,7 +74,7 @@ pub async fn get_problem(
             }
         }
 
-        let data = db.query(|q| {
+        let mut data = db.query(|q| {
             let sfp = solutions_for_problem(q, problem);
             let yours = aggregate(|q| {
                 let subm = Submission::join(q);
@@ -94,8 +94,9 @@ pub async fn get_problem(
                 yours,
             })
         });
+        
 
-        let chart_data = graph(&data);
+        let chart_data = graph(&mut data);
 
         let js = format!(
             "
@@ -203,7 +204,9 @@ fn pareto(data: &[SolutionStats]) -> Vec<[u64; 2]> {
     tmp
 }
 
-fn graph(data: &[SolutionStats]) -> Root {
+fn graph(data: &mut [SolutionStats]) -> Root {
+    data.sort_by_key(|stats|stats.file_size);
+
     let your_data: Vec<_> = data.iter().filter(|d| d.yours).cloned().collect();
     let your_pareto = pareto(&your_data);
     let pareto = pareto(data);
@@ -294,7 +297,7 @@ pub async fn upload(
         });
 
         db.find_or_insert(Solution {
-            program,
+            program: &program,
             problem,
             random_tests: 0,
             timestamp: UnixEpoch,
