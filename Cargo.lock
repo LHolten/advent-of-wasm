@@ -1900,7 +1900,8 @@ dependencies = [
 [[package]]
 name = "rust-query"
 version = "0.4.0"
-source = "git+https://github.com/LHolten/rust-query.git?rev=7c836fa#7c836fa66c0fc31f77c405fc12b468e80a512771"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc658f51b5a43501718fbd11b4dddac6578109f2063bb1efead4fee94c49a6d6"
 dependencies = [
  "elsa",
  "k12 0.3.0",
@@ -1918,7 +1919,8 @@ dependencies = [
 [[package]]
 name = "rust-query-macros"
 version = "0.4.0"
-source = "git+https://github.com/LHolten/rust-query.git?rev=7c836fa#7c836fa66c0fc31f77c405fc12b468e80a512771"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e958b288bc94a0efde2898e707981728816cca555b6d2b7f0ff27420a70022c"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
