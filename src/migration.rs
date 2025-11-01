@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::problem::ProblemDir;
 use rust_query::{
-    migration::{schema, Config, Migrated},
+    migration::{schema, Config, Migrated, TransactionMigrate},
     Database, LocalClient,
 };
 
@@ -76,6 +76,16 @@ pub mod vN {
 pub use v2::*;
 
 pub fn initialize_db(client: &mut LocalClient) -> Database<Schema> {
+    let m = client.migrator(Config::open("test.db")).unwrap();
+    let m = m.migrate(|txn| v1::migrate::Schema {
+        problem: file_to_problem(txn),
+    });
+    m.finish().unwrap()
+}
+
+fn file_to_problem<'t>(
+    txn: &mut TransactionMigrate<'t, v1::Schema>,
+) -> Migrated<'t, v1::Schema, v2::Problem> {
     let problem_dir = ProblemDir::new().unwrap();
     let mut hash_to_name: HashMap<i64, String> = problem_dir
         .problems
@@ -87,21 +97,16 @@ pub fn initialize_db(client: &mut LocalClient) -> Database<Schema> {
         })
         .collect();
 
-    let m = client.migrator(Config::open("test.db")).unwrap();
-    let m = m.migrate(|txn| {
-        txn.migrate_optional(|old: v1::File!(file_hash, timestamp)| {
-            let name = hash_to_name.remove(&old.file_hash)?;
-            Some(v1::migrate::Problem {
-                timestamp: old.timestamp,
-                name,
-            })
+    txn.migrate_optional(|old: v1::File!(file_hash, timestamp)| {
+        let name = hash_to_name.remove(&old.file_hash)?;
+        Some(v1::migrate::Problem {
+            timestamp: old.timestamp,
+            name,
         })
-        .expect("name should be unique");
-        v1::migrate::Schema {
-            problem: Migrated::map_fk_err(|| panic!("name missing for hash")),
-        }
-    });
-    m.finish().unwrap()
+    })
+    .expect("name should be unique");
+
+    Migrated::map_fk_err(|| panic!("name missing for hash"))
 }
 
 // Test that migrations are working
