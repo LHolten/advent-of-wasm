@@ -22,7 +22,7 @@ tokio = { version = "1.23.0", features = ["full"] }
 toml = "0.5.10"
 wasmtime = { version = "19", default-features = false, features = ["cranelift", "runtime", "wat"] }
 
-rust-query = "0.4"
+rust-query = { git = "https://github.com/LHolten/rust-query.git",  revision = "9bcb3cca0908" }
 reqwest = "0.12.3"
 tower-http = { version = "0.5.2", features = ["fs", "normalize-path"] }
 

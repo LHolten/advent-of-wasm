@@ -78,7 +78,7 @@ pub async fn get_problem(
             let sfp = solutions_for_problem(q, problem);
             let yours = aggregate(|q| {
                 let subm = Submission::join(q);
-                q.filter_on(subm.solution(), sfp.solution.program());
+                q.filter(subm.solution().eq(sfp.solution.program()));
                 if let Some(github_id) = github_id {
                     q.filter(subm.user().github_id().eq(github_id.0));
                 } else {
@@ -94,7 +94,7 @@ pub async fn get_problem(
                 yours,
             })
         });
-        
+
 
         let chart_data = graph(&mut data);
 
@@ -169,14 +169,14 @@ fn solutions_for_problem<'a>(
 
     let total_instances = aggregate(|q| {
         let instance = Instance::join(q);
-        q.filter_on(instance.problem(), &problem);
+        q.filter(instance.problem().eq(&problem));
         q.count_distinct(instance)
     });
 
     let (max_fuel, count) = aggregate(|q| {
         let exec = Execution::join(q);
-        q.filter_on(exec.solution(), &solution);
-        q.filter_on(exec.instance().problem(), &problem);
+        q.filter(exec.solution().eq(&solution));
+        q.filter(exec.instance().problem().eq(&problem));
         (q.max(exec.fuel_used()), q.count_distinct(exec))
     });
 
@@ -205,7 +205,7 @@ fn pareto(data: &[SolutionStats]) -> Vec<[u64; 2]> {
 }
 
 fn graph(data: &mut [SolutionStats]) -> Root {
-    data.sort_by_key(|stats|stats.file_size);
+    data.sort_by_key(|stats| stats.file_size);
 
     let your_data: Vec<_> = data.iter().filter(|d| d.yours).cloned().collect();
     let your_pareto = pareto(&your_data);

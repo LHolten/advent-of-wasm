@@ -553,15 +553,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60b1af1c220855b6ceac025d3f6ecdd2b7c4894bfe9cd9bda4fbb4bc7c0d4cf0"
 
 [[package]]
-name = "elsa"
-version = "1.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d98e71ae4df57d214182a2e5cb90230c0192c6ddfcaa05c36453d46a54713e10"
-dependencies = [
- "stable_deref_trait",
-]
-
-[[package]]
 name = "encoding_rs"
 version = "0.8.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1899,11 +1890,9 @@ dependencies = [
 
 [[package]]
 name = "rust-query"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc658f51b5a43501718fbd11b4dddac6578109f2063bb1efead4fee94c49a6d6"
+version = "0.4.2"
+source = "git+https://github.com/LHolten/rust-query.git#9bcb3cca0908f98fe446daa2b5c02fd9d2f6b9e1"
 dependencies = [
- "elsa",
  "k12 0.3.0",
  "pretty_assertions",
  "r2d2",
@@ -1918,9 +1907,8 @@ dependencies = [
 
 [[package]]
 name = "rust-query-macros"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e958b288bc94a0efde2898e707981728816cca555b6d2b7f0ff27420a70022c"
+version = "0.4.2"
+source = "git+https://github.com/LHolten/rust-query.git#9bcb3cca0908f98fe446daa2b5c02fd9d2f6b9e1"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",

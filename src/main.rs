@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
 
         let num = db.query_one(aggregate(|q| {
             let instance = Instance::join(q);
-            q.filter_on(instance.problem(), &problem);
+            q.filter(instance.problem().eq(&problem));
             q.count_distinct(instance)
         }));
 
