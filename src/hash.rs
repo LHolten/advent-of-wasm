@@ -2,18 +2,18 @@ use std::{fmt::Display, str::FromStr};
 
 use base64::URL_SAFE_NO_PAD;
 use k12::digest::{ExtendableOutput, Update};
-use rust_query::{FromExpr, IntoSelectExt, Select};
+use rust_query::{FromExpr, IntoSelect, Select};
 use serde::{de, Deserialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FileHash([u8; 8]);
 
-impl<'t, S> FromExpr<'t, S, i64> for FileHash {
+impl<S> FromExpr<S, i64> for FileHash {
     fn from_expr<'columns>(
         col: impl rust_query::IntoExpr<'columns, S, Typ = i64>,
-    ) -> Select<'columns, 't, S, Self> {
+    ) -> Select<'columns, S, Self> {
         let col = col.into_expr();
-        col.map_select(|value| FileHash(value.to_le_bytes()))
+        col.into_select().map(|value| FileHash(value.to_le_bytes()))
     }
 }
 

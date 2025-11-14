@@ -6,7 +6,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::{html, PreEscaped};
-use rust_query::{aggregate, Expr, FromExpr, IntoExpr, Select, Table, UnixEpoch};
+use rust_query::{aggregate, Expr, FromExpr, IntoExpr, Select, UnixEpoch};
 use serde::Deserialize;
 
 use crate::{
@@ -62,9 +62,9 @@ pub async fn get_problem(
 
             let hashes: Vec<FileHash> = db.query(|q| {
                 let sfp = solutions_for_problem(q, problem);
-                q.filter(sfp.solution.program().file_size().eq(size as i64));
+                q.filter(sfp.solution.program.file_size.eq(size as i64));
                 q.filter(sfp.max_fuel.eq(fuel as i64));
-                q.into_vec(FileHash::from_expr(sfp.solution.program().file_hash()))
+                q.into_vec(FileHash::from_expr(&sfp.solution.program.file_hash))
             });
             if hashes.len() == 1 {
                 let target = format!("{problem_name}/{}", &hashes[0]);
@@ -77,10 +77,10 @@ pub async fn get_problem(
         let mut data = db.query(|q| {
             let sfp = solutions_for_problem(q, problem);
             let yours = aggregate(|q| {
-                let subm = Submission::join(q);
-                q.filter(subm.solution().eq(sfp.solution.program()));
+                let subm = q.join(Submission);
+                q.filter(subm.solution.eq(&sfp.solution.program));
                 if let Some(github_id) = github_id {
-                    q.filter(subm.user().github_id().eq(github_id.0));
+                    q.filter(subm.user.github_id.eq(github_id.0));
                 } else {
                     q.filter(false);
                 }
@@ -88,8 +88,8 @@ pub async fn get_problem(
             });
 
             q.into_vec(SolutionStatsSelect {
-                file_size: sfp.solution.program().file_size(),
-                file_hash: FileHash::from_expr(sfp.solution.program().file_hash()),
+                file_size: &sfp.solution.program.file_size,
+                file_hash: FileHash::from_expr(&sfp.solution.program.file_hash),
                 max_fuel: sfp.max_fuel,
                 yours,
             })
@@ -161,23 +161,23 @@ fn solutions_for_problem<'a>(
     problem: impl IntoExpr<'a, Schema, Typ = Problem>,
 ) -> SolutionForProblem<'a> {
     let problem = problem.into_expr();
-    let solution = Solution::join(rows);
-    rows.filter(solution.problem().eq(&problem));
+    let solution = rows.join(Solution);
+    rows.filter(solution.problem.eq(&problem));
 
     let fail = Failure::unique(&solution).is_some();
     rows.filter(fail.not());
 
     let total_instances = aggregate(|q| {
-        let instance = Instance::join(q);
-        q.filter(instance.problem().eq(&problem));
+        let instance = q.join(Instance);
+        q.filter(instance.problem.eq(&problem));
         q.count_distinct(instance)
     });
 
     let (max_fuel, count) = aggregate(|q| {
-        let exec = Execution::join(q);
-        q.filter(exec.solution().eq(&solution));
-        q.filter(exec.instance().problem().eq(&problem));
-        (q.max(exec.fuel_used()), q.count_distinct(exec))
+        let exec = q.join(Execution);
+        q.filter(exec.solution.eq(&solution));
+        q.filter(exec.instance.problem.eq(&problem));
+        (q.max(&exec.fuel_used), q.count_distinct(exec))
     });
 
     rows.filter(count.eq(total_instances));
@@ -287,7 +287,7 @@ pub async fn upload(
     let path = format!("solution/{solution_hash}.wasm");
     fs::write(path, data).unwrap();
 
-    app.write_transaction(|mut db| {
+    let res = app.write_transaction(|db| {
         let problem = db::get_problem(&db, &problem_name)?;
 
         let program = db.find_or_insert(File {
@@ -311,13 +311,12 @@ pub async fn upload(
             timestamp: UnixEpoch,
         });
 
-        db.commit();
-        app.request_bench();
-
         Ok(Redirect::to(&format!(
             "/problem/{problem_name}/{solution_hash}"
         )))
-    })
+    });
+    app.request_bench();
+    res
 }
 
 pub async fn get_template(

@@ -4,7 +4,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::html;
-use rust_query::{Select, Table};
+use rust_query::{IntoExpr, Select};
 
 use crate::{
     db,
@@ -44,21 +44,21 @@ pub async fn submission(
 
         // list executions for this problem
         let data = db.query(|q| {
-            let exec = Execution::join(q);
-            q.filter(exec.instance().problem().eq(problem));
-            q.filter(exec.solution().program().eq(program));
+            let exec = q.join(Execution);
+            q.filter(exec.instance.problem.eq(problem));
+            q.filter(exec.solution.program.eq(program));
             q.into_vec(ExecutionStatsSelect {
-                seed: exec.instance().seed(),
-                fuel: exec.fuel_used(),
+                seed: &exec.instance.seed,
+                fuel: &exec.fuel_used,
             })
         });
 
         let failure = db.query_one(Failure::unique(solution));
 
         let users: Vec<_> = db.query(|q| {
-            let submission = Submission::join(q);
-            q.filter(submission.solution().eq(program));
-            q.into_vec((submission.timestamp(), submission.user().github_login()))
+            let submission = q.join(Submission);
+            q.filter(submission.solution.eq(program));
+            q.into_vec((&submission.timestamp, &submission.user.github_login))
                 .into_iter()
                 .map(|x| x.1)
                 .collect()
@@ -71,8 +71,8 @@ pub async fn submission(
         let res = html! {
             @if let Some(fail) = failure {
                 p class="notice" {
-                    "Failed for seed " (db.query_one(fail.seed()) as u64)
-                    pre{(db.query_one(fail.message()))}
+                    "Failed for seed " (db.query_one(&fail.into_expr().seed) as u64)
+                    pre{(db.query_one(&fail.into_expr().message))}
                 }
             }
             p {

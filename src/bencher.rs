@@ -1,16 +1,16 @@
-use rust_query::{FromExpr, Select, Table, TableRow, UnixEpoch};
+use rust_query::{FromExpr, Select, TableRow, UnixEpoch};
 
 use crate::hash::FileHash;
 use crate::migration::{Execution, Failure, Instance, Solution};
 use crate::AppState;
 
 #[derive(Select)]
-struct NeedsBench<'a> {
+struct NeedsBench {
     program_hash: FileHash,
     problem_name: String,
     seed: i64,
-    instance: TableRow<'a, Instance>,
-    solution: TableRow<'a, Solution>,
+    instance: TableRow<Instance>,
+    solution: TableRow<Solution>,
 }
 
 pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
@@ -22,11 +22,11 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
 
         println!("querying the database for queue");
 
-        app.write_transaction(|mut db| {
+        app.write_transaction(|db| {
             let needs_bench = db.query(|q| {
-                let instance = Instance::join(q);
-                let solution = Solution::join(q);
-                q.filter(instance.problem().eq(solution.problem()));
+                let instance = &q.join(Instance);
+                let solution = &q.join(Solution);
+                q.filter(instance.problem.eq(&solution.problem));
 
                 let is_executed = Execution::unique(&instance, &solution).is_some();
                 // not executed yet
@@ -37,9 +37,9 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                 q.filter(fail.not());
 
                 q.into_vec(NeedsBenchSelect {
-                    program_hash: FileHash::from_expr(solution.program().file_hash()),
-                    problem_name: solution.problem().name(),
-                    seed: instance.seed(),
+                    program_hash: FileHash::from_expr(&solution.program.file_hash),
+                    problem_name: &solution.problem.name,
+                    seed: &instance.seed,
                     instance,
                     solution,
                 })
@@ -77,8 +77,6 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
             }
 
             println!("updated: {}", needs_bench.len());
-
-            db.commit();
         });
     }
 }

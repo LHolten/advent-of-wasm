@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::problem::ProblemDir;
 use rust_query::{
     migration::{schema, Config, Migrated, TransactionMigrate},
-    Database, LocalClient,
+    Database,
 };
 
 #[schema(Schema)]
@@ -75,8 +75,8 @@ pub mod vN {
 
 pub use v2::*;
 
-pub fn initialize_db(client: &mut LocalClient) -> Database<Schema> {
-    let m = client.migrator(Config::open("test.db")).unwrap();
+pub fn initialize_db() -> Database<Schema> {
+    let m = Database::migrator(Config::open("test.db")).unwrap();
     let m = m.migrate(|txn| v1::migrate::Schema {
         problem: file_to_problem(txn),
     });
@@ -84,7 +84,7 @@ pub fn initialize_db(client: &mut LocalClient) -> Database<Schema> {
 }
 
 fn file_to_problem<'t>(
-    txn: &mut TransactionMigrate<'t, v1::Schema>,
+    txn: &mut TransactionMigrate<v1::Schema>,
 ) -> Migrated<'t, v1::Schema, v2::Problem> {
     let problem_dir = ProblemDir::new().unwrap();
     let mut hash_to_name: HashMap<i64, String> = problem_dir
