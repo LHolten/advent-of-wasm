@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::problem::ProblemDir;
 use rust_query::{
     migration::{schema, Config, Migrated, TransactionMigrate},
-    Database,
+    Database, Lazy,
 };
 
 #[schema(Schema)]
@@ -31,7 +31,7 @@ pub mod vN {
     }
     // a wasm solution
     // program can only be submitted to a problem once
-    #[unique(program, problem)]
+    #[unique(problem, program)]
     pub struct Solution {
         pub timestamp: i64,
         // how many random tests did this solution pass
@@ -62,7 +62,7 @@ pub mod vN {
         pub user: User,
     }
     // a solution applied to a problem instance results in an execution
-    #[unique(instance, solution)]
+    #[unique(solution, instance)]
     pub struct Execution {
         pub timestamp: i64,
         pub fuel_used: i64,
@@ -97,7 +97,7 @@ fn file_to_problem<'t>(
         })
         .collect();
 
-    txn.migrate_optional(|old: v1::File!(file_hash, timestamp)| {
+    txn.migrate_optional(|old: Lazy<v1::File>| {
         let name = hash_to_name.remove(&old.file_hash)?;
         Some(v1::migrate::Problem {
             timestamp: old.timestamp,
@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn migrations_test() {
-        expect!["fe336f7b8ab2a39e"].assert_eq(&hash_schema::<v1::Schema>());
-        expect!["fcc2bc960920cc33"].assert_eq(&hash_schema::<v2::Schema>());
+        expect!["79beac10ee351d58"].assert_eq(&hash_schema::<v1::Schema>());
+        expect!["4c48677ee05dc15a"].assert_eq(&hash_schema::<v2::Schema>());
     }
 }

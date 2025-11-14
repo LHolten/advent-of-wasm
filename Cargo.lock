@@ -1832,9 +1832,9 @@ dependencies = [
 
 [[package]]
 name = "rust-query"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57364aa1468c86b74a1739c458e2723425d944744cd0f5eed6552aba6a1ef262"
+checksum = "ecf1e64a679aade33b118598f6b397bcb22a74e5fbc8e4fc5d634225e031deea"
 dependencies = [
  "k12 0.3.0",
  "parking_lot",
@@ -1846,14 +1846,15 @@ dependencies = [
  "sea-query",
  "sea-query-rusqlite",
  "self_cell",
+ "slab",
  "static_assertions",
 ]
 
 [[package]]
 name = "rust-query-macros"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43f00de2ba4b1a6fd21fe653952a8292fc3aa6bd7203e6ee1fde403f74d7aafd"
+checksum = "11d7abb11e6d321eb35452c6bd013fe820c43bd0397d3c17e03bd87e9c367c4d"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -2004,9 +2005,9 @@ dependencies = [
 
 [[package]]
 name = "sea-query"
-version = "1.0.0-rc.12"
+version = "1.0.0-rc.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab621a8d8b03a3e513ea075f71aa26830a55c977d7b40f09e825bb91910db823"
+checksum = "30d190945ff6b2914ef0631c1933ef67ee142b15f00b72d40bf241147d24b522"
 dependencies = [
  "inherent",
 ]

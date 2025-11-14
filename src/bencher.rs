@@ -28,11 +28,11 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                 let solution = &q.join(Solution);
                 q.filter(instance.problem.eq(&solution.problem));
 
-                let is_executed = Execution::unique(&instance, &solution).is_some();
+                let is_executed = Execution.solution(solution).instance(instance).is_some();
                 // not executed yet
                 q.filter(is_executed.not());
 
-                let fail = Failure::unique(&solution).is_some();
+                let fail = Failure.solution(solution).is_some();
                 // has not failed
                 q.filter(fail.not());
 

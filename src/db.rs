@@ -9,6 +9,6 @@ pub fn get_problem(
     db: &Transaction<Schema>,
     problem_name: &str,
 ) -> Result<TableRow<Problem>, &'static str> {
-    db.query_one(Problem::unique(problem_name))
+    db.query_one(Problem.name(problem_name))
         .ok_or("could not find problem")
 }

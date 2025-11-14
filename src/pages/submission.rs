@@ -4,7 +4,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::html;
-use rust_query::{IntoExpr, Select};
+use rust_query::Select;
 
 use crate::{
     db,
@@ -29,11 +29,11 @@ pub async fn submission(
             .parse()
             .map_err(|_| "program hash is not formatted correctly")?;
         let program = db
-            .query_one(File::unique(i64::from(program_hash)))
+            .query_one(File.file_hash(i64::from(program_hash)))
             .ok_or("could not find program")?;
 
         let solution = db
-            .query_one(Solution::unique(program, problem))
+            .query_one(Solution.problem(problem).program(program))
             .ok_or("program was never submitted for problem")?;
 
         #[derive(Select)]
@@ -53,11 +53,10 @@ pub async fn submission(
             })
         });
 
-        let failure = db.query_one(Failure::unique(solution));
+        let failure = db.lazy(Failure.solution(solution));
 
         let users: Vec<_> = db.query(|q| {
-            let submission = q.join(Submission);
-            q.filter(submission.solution.eq(program));
+            let submission = q.join(Submission.solution(program));
             q.into_vec((&submission.timestamp, &submission.user.github_login))
                 .into_iter()
                 .map(|x| x.1)
@@ -71,8 +70,8 @@ pub async fn submission(
         let res = html! {
             @if let Some(fail) = failure {
                 p class="notice" {
-                    "Failed for seed " (db.query_one(&fail.into_expr().seed) as u64)
-                    pre{(db.query_one(&fail.into_expr().message))}
+                    "Failed for seed " (fail.seed as u64)
+                    pre{(&fail.message)}
                 }
             }
             p {

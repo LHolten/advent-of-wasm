@@ -161,10 +161,9 @@ fn solutions_for_problem<'a>(
     problem: impl IntoExpr<'a, Schema, Typ = Problem>,
 ) -> SolutionForProblem<'a> {
     let problem = problem.into_expr();
-    let solution = rows.join(Solution);
-    rows.filter(solution.problem.eq(&problem));
+    let solution = rows.join(Solution.problem(&problem));
 
-    let fail = Failure::unique(&solution).is_some();
+    let fail = Failure.solution(&solution).is_some();
     rows.filter(fail.not());
 
     let total_instances = aggregate(|q| {
@@ -174,8 +173,7 @@ fn solutions_for_problem<'a>(
     });
 
     let (max_fuel, count) = aggregate(|q| {
-        let exec = q.join(Execution);
-        q.filter(exec.solution.eq(&solution));
+        let exec = q.join(Execution.solution(&solution));
         q.filter(exec.instance.problem.eq(&problem));
         (q.max(&exec.fuel_used), q.count_distinct(exec))
     });
@@ -303,7 +301,7 @@ pub async fn upload(
             timestamp: UnixEpoch,
         });
 
-        let user = db.query_one(User::unique(github_id.0)).unwrap();
+        let user = db.query_one(User.github_id(github_id.0)).unwrap();
 
         db.find_or_insert(Submission {
             solution: program,
