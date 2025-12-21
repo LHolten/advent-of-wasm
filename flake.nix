@@ -1,14 +1,14 @@
 {
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
-    naersk.url = "github:nix-community/naersk";
+    crane.url = "github:ipetkov/crane";
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   };
 
   outputs = {
     self,
     flake-utils,
-    naersk,
+    crane,
     nixpkgs,
   }:
     flake-utils.lib.eachDefaultSystem (
@@ -17,9 +17,7 @@
           inherit system;
         };
 
-        naersk' =
-          pkgs.callPackage naersk {
-          };
+        craneLib = crane.mkLib pkgs;
 
         editor = pkgs.buildNpmPackage {
           pname = "editor";
@@ -32,10 +30,10 @@
           installPhase = "cp -r dist $out";
         };
 
-        server = naersk'.buildPackage {
+        server = craneLib.buildPackage {
           nativeBuildInputs = with pkgs; [pkg-config rustPlatform.bindgenHook];
           buildInputs = with pkgs; [openssl sqlite];
-          src = ./.;
+          src = craneLib.cleanCargoSource ./.;
         };
 
         link_start = pkgs.writeShellScriptBin "start" ''
