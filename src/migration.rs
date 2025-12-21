@@ -7,7 +7,7 @@ use rust_query::{
 };
 
 #[schema(Schema)]
-#[version(1..=2)]
+#[version(1..=3)]
 pub mod vN {
     pub struct File {
         pub timestamp: i64,
@@ -73,13 +73,15 @@ pub mod vN {
     }
 }
 
-pub use v2::*;
+pub use v3::*;
 
 pub fn initialize_db() -> Database<Schema> {
     let m = Database::migrator(Config::open("test.db")).unwrap();
-    let m = m.migrate(|txn| v1::migrate::Schema {
-        problem: file_to_problem(txn),
-    });
+    let m = m
+        .migrate(|txn| v1::migrate::Schema {
+            problem: file_to_problem(txn),
+        })
+        .migrate(|_txn| v2::migrate::Schema {});
     m.finish().unwrap()
 }
 
@@ -121,5 +123,6 @@ mod tests {
     fn migrations_test() {
         expect!["79beac10ee351d58"].assert_eq(&hash_schema::<v1::Schema>());
         expect!["4c48677ee05dc15a"].assert_eq(&hash_schema::<v2::Schema>());
+        expect!["4c48677ee05dc15a"].assert_eq(&hash_schema::<v3::Schema>());
     }
 }
