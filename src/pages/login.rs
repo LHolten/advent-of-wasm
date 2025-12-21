@@ -124,13 +124,14 @@ pub async fn safe_login(jar: &mut CookieJar, app: &AppState) -> Result<GithubId,
     let github_id = val.get("id").unwrap().as_u64().unwrap();
     let github_login = val.get("login").unwrap().as_str().unwrap().to_owned();
 
-    app.write_transaction(|db| {
+    app.write_transaction(move |db| {
         db.find_or_insert(User {
             github_id: github_id as i64,
             github_login: github_login.as_str(),
             timestamp: Expr::unix_epoch(),
         });
-    });
+    })
+    .await;
 
     Ok(GithubId(github_id as i64))
 }

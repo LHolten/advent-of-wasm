@@ -17,7 +17,7 @@ mod problem;
 mod solution;
 
 use migration::{initialize_db, Instance, Problem, Schema};
-use rust_query::{aggregate, Database, Expr, Transaction};
+use rust_query::{aggregate, Database, DatabaseAsync, Expr, Transaction};
 
 #[derive(Clone)]
 pub struct AppState(Arc<AppStateInner>);
@@ -32,25 +32,28 @@ impl Deref for AppState {
 
 pub struct AppStateInner {
     problem_dir: ProblemDir,
-    database: Database<Schema>,
+    database: Arc<Database<Schema>>,
     watcher: Condvar,
     updated: Mutex<bool>,
 }
 
 impl AppState {
-    /// Don't forget to commit!
-    pub fn write_transaction<F, R: Send>(&self, f: F) -> R
+    pub async fn write_transaction<F, R: 'static + Send>(&self, f: F) -> R
     where
-        F: Send + FnOnce(&'static mut Transaction<Schema>) -> R,
+        F: 'static + Send + FnOnce(&'static mut Transaction<Schema>) -> R,
     {
-        tokio::task::block_in_place(|| self.database.transaction_mut_ok(f))
+        DatabaseAsync::new(self.database.clone())
+            .transaction_mut_ok(f)
+            .await
     }
 
-    pub fn read_transaction<F, R: Send>(&self, f: F) -> R
+    pub async fn read_transaction<F, R: 'static + Send>(&self, f: F) -> R
     where
-        F: Send + FnOnce(&'static Transaction<Schema>) -> R,
+        F: 'static + Send + FnOnce(&'static Transaction<Schema>) -> R,
     {
-        tokio::task::block_in_place(|| self.database.transaction(f))
+        DatabaseAsync::new(self.database.clone())
+            .transaction(f)
+            .await
     }
 
     pub fn request_bench(&self) {
@@ -94,7 +97,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app_state = AppStateInner {
         problem_dir,
-        database,
+        database: Arc::new(database),
         updated: Mutex::new(true),
         watcher: Condvar::new(),
     };

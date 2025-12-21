@@ -98,4 +98,5 @@ pub async fn submission(
         let res = header(location, &jar, res);
         Ok(Html(res.into_string()))
     })
+    .await
 }

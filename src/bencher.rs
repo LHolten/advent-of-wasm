@@ -22,7 +22,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
 
         println!("querying the database for queue");
 
-        app.write_transaction(|db| {
+        app.0.database.transaction_mut_ok(|db| {
             let needs_bench = db.query(|q| {
                 let instance = &q.join(Instance);
                 let solution = &q.join(Solution);

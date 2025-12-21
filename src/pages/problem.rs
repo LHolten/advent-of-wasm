@@ -148,7 +148,7 @@ pub async fn get_problem(
         };
         let res = header(location, &jar, res);
         Ok(Html(res.into_string()).into_response())
-    })
+    }).await
 }
 
 struct SolutionForProblem<'a> {
@@ -285,34 +285,36 @@ pub async fn upload(
     let path = format!("solution/{solution_hash}.wasm");
     fs::write(path, data).unwrap();
 
-    let res = app.write_transaction(|db| {
-        let problem = db::get_problem(&db, &problem_name)?;
+    let res = app
+        .write_transaction(move |db| {
+            let problem = db::get_problem(&db, &problem_name)?;
 
-        let program = db.find_or_insert(File {
-            file_hash: i64::from(solution_hash),
-            file_size: data_len as i64,
-            timestamp: Expr::unix_epoch(),
-        });
+            let program = db.find_or_insert(File {
+                file_hash: i64::from(solution_hash),
+                file_size: data_len as i64,
+                timestamp: Expr::unix_epoch(),
+            });
 
-        db.find_or_insert(Solution {
-            program: &program,
-            problem,
-            random_tests: 0,
-            timestamp: Expr::unix_epoch(),
-        });
+            db.find_or_insert(Solution {
+                program: &program,
+                problem,
+                random_tests: 0,
+                timestamp: Expr::unix_epoch(),
+            });
 
-        let user = db.query_one(User.github_id(github_id.0)).unwrap();
+            let user = db.query_one(User.github_id(github_id.0)).unwrap();
 
-        db.find_or_insert(Submission {
-            solution: program,
-            user,
-            timestamp: Expr::unix_epoch(),
-        });
+            db.find_or_insert(Submission {
+                solution: program,
+                user,
+                timestamp: Expr::unix_epoch(),
+            });
 
-        Ok(Redirect::to(&format!(
-            "/problem/{problem_name}/{solution_hash}"
-        )))
-    });
+            Ok(Redirect::to(&format!(
+                "/problem/{problem_name}/{solution_hash}"
+            )))
+        })
+        .await;
     app.request_bench();
     res
 }
@@ -333,4 +335,5 @@ pub async fn get_template(
             )
         })
     })
+    .await
 }
