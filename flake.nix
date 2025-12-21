@@ -34,6 +34,7 @@
           nativeBuildInputs = with pkgs; [pkg-config rustPlatform.bindgenHook];
           buildInputs = with pkgs; [openssl sqlite];
           src = craneLib.cleanCargoSource ./.;
+          dontStrip = true;
         };
 
         link_start = pkgs.writeShellScriptBin "start" ''
