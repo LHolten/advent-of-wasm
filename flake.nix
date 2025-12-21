@@ -3,35 +3,25 @@
     flake-utils.url = "github:numtide/flake-utils";
     naersk.url = "github:nix-community/naersk";
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    nixpkgs-mozilla = {
-      url = "github:mozilla/nixpkgs-mozilla";
-      flake = false;
-    };
   };
 
-  outputs = { self, flake-utils, naersk, nixpkgs, nixpkgs-mozilla }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
+  outputs = {
+    self,
+    flake-utils,
+    naersk,
+    nixpkgs,
+  }:
+    flake-utils.lib.eachDefaultSystem (
+      system: let
         pkgs = (import nixpkgs) {
           inherit system;
-
-          overlays = [
-            (import nixpkgs-mozilla)
-          ];
         };
 
-        toolchain = (pkgs.rustChannelOf {
-          date = "2024-07-25"; # 1.80.0
-          channel = "stable";
-          sha256 = "sha256-6eN/GKzjVSjEhGO9FhWObkRFaE1Jf+uqMSdQnb8lcB4=";
-        }).rust;
+        naersk' =
+          pkgs.callPackage naersk {
+          };
 
-        naersk' = pkgs.callPackage naersk {
-          cargo = toolchain;
-          rustc = toolchain;
-        };
-
-        editor = pkgs.buildNpmPackage rec {
+        editor = pkgs.buildNpmPackage {
           pname = "editor";
           version = "1.0.0";
 
@@ -43,8 +33,8 @@
         };
 
         server = naersk'.buildPackage {
-          nativeBuildInputs = with pkgs; [ pkg-config rustPlatform.bindgenHook ];
-          buildInputs = with pkgs; [ openssl sqlite ];
+          nativeBuildInputs = with pkgs; [pkg-config rustPlatform.bindgenHook];
+          buildInputs = with pkgs; [openssl sqlite];
           src = ./.;
         };
 
@@ -58,9 +48,9 @@
         # For `nix build` & `nix run`:
         defaultPackage = server;
 
-        nixosModules.default = { ... }: {
+        nixosModules.default = {...}: {
           systemd.services.advent-of-wasm = {
-            wantedBy = [ "multi-user.target" ];
+            wantedBy = ["multi-user.target"];
             serviceConfig = {
               ExecStart = "${link_start}/bin/start";
               User = "advent-of-wasm";
@@ -69,7 +59,7 @@
               StateDirectory = "advent-of-wasm";
             };
           };
-          
+
           users.users.advent-of-wasm = {
             isSystemUser = true;
             group = "advent-of-wasm";
@@ -92,7 +82,7 @@
 
         # For `nix develop`:
         devShell = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [ rustc cargo ];
+          nativeBuildInputs = with pkgs; [rustc cargo];
         };
       }
     );
