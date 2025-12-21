@@ -6,7 +6,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::{html, PreEscaped};
-use rust_query::{aggregate, Expr, FromExpr, IntoExpr, Select, UnixEpoch};
+use rust_query::{aggregate, Expr, FromExpr, IntoExpr, Select};
 use serde::Deserialize;
 
 use crate::{
@@ -291,14 +291,14 @@ pub async fn upload(
         let program = db.find_or_insert(File {
             file_hash: i64::from(solution_hash),
             file_size: data_len as i64,
-            timestamp: UnixEpoch,
+            timestamp: Expr::unix_epoch(),
         });
 
         db.find_or_insert(Solution {
             program: &program,
             problem,
             random_tests: 0,
-            timestamp: UnixEpoch,
+            timestamp: Expr::unix_epoch(),
         });
 
         let user = db.query_one(User.github_id(github_id.0)).unwrap();
@@ -306,7 +306,7 @@ pub async fn upload(
         db.find_or_insert(Submission {
             solution: program,
             user,
-            timestamp: UnixEpoch,
+            timestamp: Expr::unix_epoch(),
         });
 
         Ok(Redirect::to(&format!(

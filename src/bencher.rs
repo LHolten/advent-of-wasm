@@ -1,4 +1,4 @@
-use rust_query::{FromExpr, Select, TableRow, UnixEpoch};
+use rust_query::{Expr, FromExpr, Select, TableRow};
 
 use crate::hash::FileHash;
 use crate::migration::{Execution, Failure, Instance, Solution};
@@ -60,7 +60,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                             fuel_used: fuel as i64,
                             instance: item.instance,
                             solution: item.solution,
-                            timestamp: UnixEpoch,
+                            timestamp: Expr::unix_epoch(),
                         })
                         .unwrap();
                     }
@@ -69,7 +69,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                         db.find_or_insert(Failure {
                             seed: item.seed,
                             solution: item.solution,
-                            timestamp: UnixEpoch,
+                            timestamp: Expr::unix_epoch(),
                             message: err.as_str(),
                         });
                     }

@@ -17,7 +17,7 @@ mod problem;
 mod solution;
 
 use migration::{initialize_db, Instance, Problem, Schema};
-use rust_query::{aggregate, Database, Transaction, UnixEpoch};
+use rust_query::{aggregate, Database, Expr, Transaction};
 
 #[derive(Clone)]
 pub struct AppState(Arc<AppStateInner>);
@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
     database.transaction_mut_ok(|db| {
         for (problem_name, details) in &problem_dir.problems {
             let problem = db.find_or_insert(Problem {
-                timestamp: UnixEpoch,
+                timestamp: Expr::unix_epoch(),
                 name: problem_name.as_str(),
             });
 
@@ -86,7 +86,7 @@ async fn main() -> anyhow::Result<()> {
                 db.find_or_insert(Instance {
                     problem: &problem,
                     seed,
-                    timestamp: UnixEpoch,
+                    timestamp: Expr::unix_epoch(),
                 });
             }
         }

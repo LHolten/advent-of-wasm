@@ -9,7 +9,7 @@ use oauth2::TokenResponse;
 use oauth2::{
     basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, TokenUrl,
 };
-use rust_query::UnixEpoch;
+use rust_query::Expr;
 use serde::Deserialize;
 
 use crate::db::GithubId;
@@ -128,7 +128,7 @@ pub async fn safe_login(jar: &mut CookieJar, app: &AppState) -> Result<GithubId,
         db.find_or_insert(User {
             github_id: github_id as i64,
             github_login: github_login.as_str(),
-            timestamp: UnixEpoch,
+            timestamp: Expr::unix_epoch(),
         });
     });
 
