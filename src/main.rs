@@ -1,6 +1,7 @@
 use std::{
     ops::Deref,
     sync::{Arc, Condvar, Mutex},
+    time::SystemTime,
 };
 
 use pages::web_server;
@@ -17,7 +18,7 @@ mod problem;
 mod solution;
 
 use migration::{initialize_db, Instance, Problem, Schema};
-use rust_query::{aggregate, Database, DatabaseAsync, Expr, Transaction};
+use rust_query::{aggregate, Database, DatabaseAsync, Transaction};
 
 #[derive(Clone)]
 pub struct AppState(Arc<AppStateInner>);
@@ -71,8 +72,8 @@ async fn main() -> anyhow::Result<()> {
     database.transaction_mut_ok(|db| {
         for (problem_name, details) in &problem_dir.problems {
             let problem = db.find_or_insert(Problem {
-                timestamp: Expr::unix_epoch(),
-                name: problem_name.as_str(),
+                timestamp: timestamp_now(),
+                name: problem_name.clone(),
             });
 
             let num = db.query_one(aggregate(|q| {
@@ -87,9 +88,9 @@ async fn main() -> anyhow::Result<()> {
                 let seed = rng.next_u64() as i64;
 
                 db.find_or_insert(Instance {
-                    problem: &problem,
+                    problem,
                     seed,
-                    timestamp: Expr::unix_epoch(),
+                    timestamp: timestamp_now(),
                 });
             }
         }
@@ -103,4 +104,11 @@ async fn main() -> anyhow::Result<()> {
     };
 
     web_server(AppState(Arc::new(app_state))).await
+}
+
+fn timestamp_now() -> i64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
 }

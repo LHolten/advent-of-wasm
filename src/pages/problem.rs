@@ -6,7 +6,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use maud::{html, PreEscaped};
-use rust_query::{aggregate, Expr, FromExpr, IntoExpr, Select};
+use rust_query::{aggregate, Expr, FromExpr, IntoExpr, Select, TableRow};
 use serde::Deserialize;
 
 use crate::{
@@ -20,7 +20,7 @@ use crate::{
         Location, ProblemPage,
     },
     solution::verify_wasm,
-    AppState,
+    timestamp_now, AppState,
 };
 
 #[derive(Deserialize)]
@@ -152,13 +152,13 @@ pub async fn get_problem(
 }
 
 struct SolutionForProblem<'a> {
-    solution: Expr<'a, Schema, Solution>,
+    solution: Expr<'a, Schema, TableRow<Solution>>,
     max_fuel: Expr<'a, Schema, i64>,
 }
 
 fn solutions_for_problem<'a>(
     rows: &mut rust_query::args::Rows<'a, Schema>,
-    problem: impl IntoExpr<'a, Schema, Typ = Problem>,
+    problem: impl IntoExpr<'a, Schema, Typ = TableRow<Problem>>,
 ) -> SolutionForProblem<'a> {
     let problem = problem.into_expr();
     let solution = rows.join(Solution.problem(&problem));
@@ -292,14 +292,14 @@ pub async fn upload(
             let program = db.find_or_insert(File {
                 file_hash: i64::from(solution_hash),
                 file_size: data_len as i64,
-                timestamp: Expr::unix_epoch(),
+                timestamp: timestamp_now(),
             });
 
             db.find_or_insert(Solution {
-                program: &program,
+                program,
                 problem,
                 random_tests: 0,
-                timestamp: Expr::unix_epoch(),
+                timestamp: timestamp_now(),
             });
 
             let user = db.query_one(User.github_id(github_id.0)).unwrap();
@@ -307,7 +307,7 @@ pub async fn upload(
             db.find_or_insert(Submission {
                 solution: program,
                 user,
-                timestamp: Expr::unix_epoch(),
+                timestamp: timestamp_now(),
             });
 
             Ok(Redirect::to(&format!(

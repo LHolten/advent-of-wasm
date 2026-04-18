@@ -1193,9 +1193,9 @@ dependencies = [
 
 [[package]]
 name = "keccak"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecc2af9a1119c51f12a14607e783cb977bde58bc069ff0c3da1095e635d70654"
+checksum = "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
 dependencies = [
  "cpufeatures",
 ]
@@ -1867,8 +1867,9 @@ dependencies = [
 
 [[package]]
 name = "rust-query"
-version = "0.6.6"
-source = "git+https://github.com/LHolten/rust-query.git#0f2b65d95e1ccc4a204c9373b44a3494f8fdbc81"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe3568ecefac8c11e899181c0bb8a46a0d1417878a852fff2a24f334d594348a"
 dependencies = [
  "annotate-snippets",
  "k12 0.3.0",
@@ -1887,8 +1888,9 @@ dependencies = [
 
 [[package]]
 name = "rust-query-macros"
-version = "0.6.6"
-source = "git+https://github.com/LHolten/rust-query.git#0f2b65d95e1ccc4a204c9373b44a3494f8fdbc81"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d52c12a8b1ca7238a76ef9f08e5f2bef4f1a02a88faa7c73ab91fc84ff0182e"
 dependencies = [
  "heck",
  "proc-macro2",

@@ -9,12 +9,11 @@ use oauth2::TokenResponse;
 use oauth2::{
     basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, TokenUrl,
 };
-use rust_query::Expr;
 use serde::Deserialize;
 
 use crate::db::GithubId;
 use crate::migration::User;
-use crate::AppState;
+use crate::{timestamp_now, AppState};
 
 #[derive(Deserialize)]
 pub struct Auth {
@@ -127,8 +126,8 @@ pub async fn safe_login(jar: &mut CookieJar, app: &AppState) -> Result<GithubId,
     app.write_transaction(move |db| {
         db.find_or_insert(User {
             github_id: github_id as i64,
-            github_login: github_login.as_str(),
-            timestamp: Expr::unix_epoch(),
+            github_login: github_login,
+            timestamp: timestamp_now(),
         });
     })
     .await;

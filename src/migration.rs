@@ -9,6 +9,8 @@ use rust_query::{
 #[schema(Schema)]
 #[version(1..=3)]
 pub mod vN {
+    use rust_query::TableRow;
+
     pub struct File {
         pub timestamp: i64,
         #[unique]
@@ -27,7 +29,7 @@ pub mod vN {
     pub struct Instance {
         pub timestamp: i64,
         pub seed: i64,
-        pub problem: Problem,
+        pub problem: TableRow<Problem>,
     }
     // a wasm solution
     // program can only be submitted to a problem once
@@ -36,14 +38,14 @@ pub mod vN {
         pub timestamp: i64,
         // how many random tests did this solution pass
         pub random_tests: i64,
-        pub program: File,
-        pub problem: Problem,
+        pub program: TableRow<File>,
+        pub problem: TableRow<Problem>,
     }
     // a random test "or benchmark test" failed
     pub struct Failure {
         pub timestamp: i64,
         #[unique]
-        pub solution: Solution,
+        pub solution: TableRow<Solution>,
         pub seed: i64,
         pub message: String,
     }
@@ -58,8 +60,8 @@ pub mod vN {
     #[unique(solution, user)]
     pub struct Submission {
         pub timestamp: i64,
-        pub solution: File,
-        pub user: User,
+        pub solution: TableRow<File>,
+        pub user: TableRow<User>,
     }
     // a solution applied to a problem instance results in an execution
     #[unique(solution, instance)]
@@ -68,8 +70,8 @@ pub mod vN {
         pub fuel_used: i64,
         // answer can be null if the solution crashed
         pub answer: Option<i64>,
-        pub instance: Instance,
-        pub solution: Solution,
+        pub instance: TableRow<Instance>,
+        pub solution: TableRow<Solution>,
     }
 }
 
