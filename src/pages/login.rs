@@ -13,7 +13,7 @@ use serde::Deserialize;
 
 use crate::db::GithubId;
 use crate::migration::User;
-use crate::{timestamp_now, AppState};
+use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct Auth {
@@ -127,7 +127,7 @@ pub async fn safe_login(jar: &mut CookieJar, app: &AppState) -> Result<GithubId,
         db.find_or_insert(User {
             github_id: github_id as i64,
             github_login: github_login,
-            timestamp: timestamp_now(),
+            timestamp: jiff::Timestamp::now(),
         });
     })
     .await;

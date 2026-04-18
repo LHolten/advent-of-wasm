@@ -1,7 +1,6 @@
 use std::{
     ops::Deref,
     sync::{Arc, Condvar, Mutex},
-    time::SystemTime,
 };
 
 use pages::web_server;
@@ -72,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
     database.transaction_mut_ok(|db| {
         for (problem_name, details) in &problem_dir.problems {
             let problem = db.find_or_insert(Problem {
-                timestamp: timestamp_now(),
+                timestamp: jiff::Timestamp::now(),
                 name: problem_name.clone(),
             });
 
@@ -90,7 +89,7 @@ async fn main() -> anyhow::Result<()> {
                 db.find_or_insert(Instance {
                     problem,
                     seed,
-                    timestamp: timestamp_now(),
+                    timestamp: jiff::Timestamp::now(),
                 });
             }
         }
@@ -104,11 +103,4 @@ async fn main() -> anyhow::Result<()> {
     };
 
     web_server(AppState(Arc::new(app_state))).await
-}
-
-fn timestamp_now() -> i64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64
 }

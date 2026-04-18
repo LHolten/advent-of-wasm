@@ -2,7 +2,7 @@ use rust_query::{FromExpr, Select, TableRow};
 
 use crate::hash::FileHash;
 use crate::migration::{Execution, Failure, Instance, Solution};
-use crate::{timestamp_now, AppState};
+use crate::AppState;
 
 #[derive(Select)]
 struct NeedsBench {
@@ -60,7 +60,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                             fuel_used: fuel as i64,
                             instance: item.instance,
                             solution: item.solution,
-                            timestamp: timestamp_now(),
+                            timestamp: jiff::Timestamp::now(),
                         })
                         .unwrap();
                     }
@@ -69,7 +69,7 @@ pub fn bencher_main(app: AppState) -> anyhow::Result<()> {
                         db.find_or_insert(Failure {
                             seed: item.seed,
                             solution: item.solution,
-                            timestamp: timestamp_now(),
+                            timestamp: jiff::Timestamp::now(),
                             message: err,
                         });
                     }

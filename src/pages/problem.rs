@@ -20,7 +20,7 @@ use crate::{
         Location, ProblemPage,
     },
     solution::verify_wasm,
-    timestamp_now, AppState,
+    AppState,
 };
 
 #[derive(Deserialize)]
@@ -292,14 +292,14 @@ pub async fn upload(
             let program = db.find_or_insert(File {
                 file_hash: i64::from(solution_hash),
                 file_size: data_len as i64,
-                timestamp: timestamp_now(),
+                timestamp: jiff::Timestamp::now(),
             });
 
             db.find_or_insert(Solution {
                 program,
                 problem,
                 random_tests: 0,
-                timestamp: timestamp_now(),
+                timestamp: jiff::Timestamp::now(),
             });
 
             let user = db.query_one(User.github_id(github_id.0)).unwrap();
@@ -307,7 +307,7 @@ pub async fn upload(
             db.find_or_insert(Submission {
                 solution: program,
                 user,
-                timestamp: timestamp_now(),
+                timestamp: jiff::Timestamp::now(),
             });
 
             Ok(Redirect::to(&format!(
